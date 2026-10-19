@@ -466,7 +466,7 @@
       if (machinesLoaded && !force) return;
       refreshMachinesButton.disabled = true;
       try {
-        const data = await api('/api/machines');
+        const data = await api(force ? '/api/machines?fresh=1' : '/api/machines');
         const choices = data.machines.map(machine => ({ id: machine.id, label: machine.name }));
         const preferred = defaults.machine;
         if (preferred && !choices.some(machine => machine.id === preferred) && data.unavailable) {
@@ -552,7 +552,7 @@
       if (!force && chatsByMachine.has(machine)) { showChats(chatsByMachine.get(machine)); return; }
       setOptions(targetChatInput, [], 'Loading chats…');
       try {
-        const data = await api(`/api/chat-names?machine=${encodeURIComponent(machine)}`);
+        const data = await api(`/api/chat-names?machine=${encodeURIComponent(machine)}${force ? '&fresh=1' : ''}`);
         chatsByMachine.set(machine, data.chats);
         if (request === chatRequest) showChats(data.chats);
       } catch (_) {
@@ -969,9 +969,12 @@
     const defaultsFetch = api('/api/destination-defaults').then(data => {
       if (defaultsChanged) return;
       if (localDefaultsReady && (defaults.updated_at || 0) > (data.updated_at || 0)) { saveDefaults(); return; }
+      const machineBefore = modelMachine();
       defaults = data;
       providerInput.value = defaults.provider;
       try { localStorage.setItem(DEFAULTS_KEY, JSON.stringify(defaults)); } catch (_) {}
+      // A new browser learns the usual machine only now; warm its models ahead of Continue.
+      if (modelMachine() !== machineBefore) warmModels();
       if (activeView === 'setup') loadModels();
     }).catch(() => {});
     defaultsReady = localDefaultsReady ? Promise.resolve() : defaultsFetch;

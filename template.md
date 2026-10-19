@@ -2,7 +2,7 @@
 title: "Untitled Notes Voice"
 description: "Draft messages with on-device voice dictation, then send them to chats across your Imbue Studio machines."
 thumbnail: "template.svg"
-version: v3
+version: v4
 format: v2
 ---
 
@@ -35,7 +35,7 @@ The app directory contains the Flask server, browser voice modules, icon, manife
 
 Typed and recognized text autosaves to SQLite under `data/.apps/untitled-notes-voice`. Audio processing stays in the browser. Base uses Silero VAD, Transformers.js and Moonshine; v2 uses Moonshine's streaming WASM package. Browser modules load from public CDNs/model hosts and the workspace's built shell assets. Sending uses the local Studio chat service on port 8010; linked destinations use the workspace gateway and SSH. The app itself makes no direct LLM call.
 
-The original app is external to the source monorepo. To update, stage a clean archive of the chosen external voice source into `system/apps/untitled_notes_voice`, reapply the rules in `template.toml`, then run the documented full-tree assembly. Do not expect the monorepo SHA alone to contain the app. This version maps source workspace `9a06700e1aaf4cfa8d0b5147ab152d3beb3576b7` plus external `boweiliu/prompt-notes` voice commit `2ae501e8f88a5c2d52d13a5d6d850aaaa8717245` onto clean base `15f79b99adf24c58c2c2177ecb3ad173798ccd2d`. The private source is provenance only; adopters need no access to it.
+The original app is external to the source monorepo. To update, stage a clean archive of the chosen external voice source into `system/apps/untitled_notes_voice`, reapply the rules in `template.toml`, then run the documented full-tree assembly. Do not expect the monorepo SHA alone to contain the app. This version maps source workspace `f2a3ae339767c332dc22473e260bc6c0cd4eb5d4` plus external `boweiliu/prompt-notes` voice commit `c532cbf134db2802f3b1acb55d7134d5b4cd39c4` onto clean base `15f79b99adf24c58c2c2177ecb3ad173798ccd2d`. The private source is provenance only; adopters need no access to it.
 
 ## Recipe
 
@@ -127,6 +127,10 @@ Add the standard native-package checks and typing compatibility, keep the existi
 ### v3 (2026-10-19) -- Tab from the title goes to the note text
 
 Refresh the app from external voice source `2ae501e8f88a5c2d52d13a5d6d850aaaa8717245`: pressing Tab in the draft title now moves the cursor into the note text instead of the header buttons; Shift+Tab is unchanged. Adds a browser check for it. Server behavior, voice modules, requirements and private exclusions are unchanged.
+
+### v4 (2026-10-19) -- Destination choices load instantly
+
+Refresh the app from external voice source `c532cbf134db2802f3b1acb55d7134d5b4cd39c4`: the server remembers the last machine list, model lists and chat lists (in memory and in `choice_cache.json` under the app's data folder) and answers from that copy at once, refreshing it in the background when it is over 30 seconds old; the refresh buttons ask again. A new browser no longer waits for a linked machine before the model menu fills in. Adds checks for it. Requirements and private exclusions are unchanged.
 
 ## Adaptation history
 

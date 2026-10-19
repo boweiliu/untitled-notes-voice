@@ -1,4 +1,6 @@
+import json
 import sqlite3
+import threading
 from pathlib import Path
 
 from prompt_notes import runner
@@ -65,7 +67,7 @@ def test_empty_title_stays_empty_and_destination_defaults_persist(tmp_path: Path
     assert runner.app.test_client().get("/api/destination-defaults").get_json() == preferences
 
 
-def test_machine_choices_show_running_linked_machines_and_current_fallback(monkeypatch) -> None:
+def test_machine_choices_show_running_linked_machines_and_current_fallback(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("MNGR_AGENT_ID", "agent-local")
     monkeypatch.setattr(runner, "studio_workspaces", lambda: {"workspaces": [
         {"agent_id": "agent-remote", "name": "Writing machine", "host_state": "RUNNING"},
@@ -81,7 +83,13 @@ def test_machine_choices_show_running_linked_machines_and_current_fallback(monke
         "unavailable": False,
     }
 
+    # When the machine list cannot be read, the last good one stays, even for a refresh.
     monkeypatch.setattr(runner, "studio_workspaces", lambda: None)
+    assert runner.app.test_client().get("/api/machines").get_json() == response
+    assert runner.app.test_client().get("/api/machines?fresh=1").get_json() == response
+
+    # With nothing remembered, it says so.
+    monkeypatch.setattr(runner, "DATA_DIR", tmp_path / "elsewhere")
     assert runner.app.test_client().get("/api/machines").get_json() == {
         "current_machine_id": "agent-local",
         "machines": [{"id": "agent-local", "name": "This machine"}],
@@ -155,3 +163,71 @@ def test_models_come_from_selected_destination(monkeypatch):
     assert response["models"][0]["id"] == "remote-model"
     assert response["available"] is True
     assert all(machine == "worker" and method == "GET" for machine, method, path in calls)
+
+
+def test_choices_answer_from_memory_and_refresh_behind(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("MNGR_AGENT_ID", "local")
+    state = {"model": "first", "fail": False}
+    calls = []
+    gate = threading.Event()
+    gate.set()
+
+    def remote(machine, method, path, payload=None, timeout=45):
+        calls.append(path)
+        if state["fail"]:
+            raise OSError("machine is off")
+        if path == "/api/harnesses":
+            return 200, {"codex": {"options": []}}
+        if path == "/api/accounts":
+            return 200, {"accounts": [{"id": "remote-account", "harness": "codex"}]}
+        assert gate.wait(10)
+        return 200, {"options": [{"id": state["model"], "label": "Model", "in_picker": True, "efforts": []}]}
+
+    def model_ids(query: str = "") -> list[str]:
+        response = client.get(f"/api/chat-models/codex?machine=worker{query}")
+        assert response.status_code == 200
+        return [model["id"] for model in response.get_json()["models"]]
+
+    monkeypatch.setattr(runner, "chat_request", remote)
+    client = runner.app.test_client()
+    assert model_ids() == ["first"]
+    assert len(calls) == 3
+    # Asked again soon after: answered from memory, the machine is not asked.
+    assert model_ids() == ["first"]
+    assert len(calls) == 3
+
+    # Once the answer is old, it still comes back at once while the machine is slow,
+    # and a background refresh picks up the change for the next ask.
+    monkeypatch.setattr(runner, "CHOICE_REFRESH_SECONDS", 0.0)
+    refreshed = threading.Event()
+    remember = runner.remember_choice
+    monkeypatch.setattr(runner, "remember_choice", lambda *args: (remember(*args), refreshed.set()))
+    state["model"] = "second"
+    gate.clear()
+    assert model_ids() == ["first"]
+    gate.set()
+    assert refreshed.wait(10)
+    monkeypatch.setattr(runner, "CHOICE_REFRESH_SECONDS", 3600.0)
+    assert model_ids() == ["second"]
+
+    # A restarted app answers from the saved copy without asking the machine.
+    runner.CHOICE_CACHES.clear()
+    asked = len(calls)
+    assert model_ids() == ["second"]
+    assert len(calls) == asked
+    saved = json.loads((tmp_path / "choice_cache.json").read_text())
+    assert saved["models:worker:codex"]["value"]["models"][0]["id"] == "second"
+
+    # A refresh that cannot reach the machine keeps the last answer.
+    state["fail"] = True
+    assert model_ids("&fresh=1") == ["second"]
+    assert len(calls) > asked
+
+    # Chat lists are remembered per machine the same way; a refresh asks again.
+    state["fail"] = False
+    chats = {"worker": [{"chat_id": "w-1", "title": "First chat"}]}
+    monkeypatch.setattr(runner, "chat_request", lambda machine, method, path, payload=None, timeout=45: (200, {"chats": chats[machine]}))
+    assert client.get("/api/chat-names?machine=worker").get_json()["chats"] == [{"id": "w-1", "name": "First chat"}]
+    chats["worker"].append({"chat_id": "w-2", "title": "New chat"})
+    assert len(client.get("/api/chat-names?machine=worker").get_json()["chats"]) == 1
+    assert len(client.get("/api/chat-names?machine=worker&fresh=1").get_json()["chats"]) == 2

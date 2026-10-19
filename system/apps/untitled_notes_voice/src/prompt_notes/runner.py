@@ -40,11 +40,13 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Generator
 
 from flask import Flask, Response, abort, jsonify, request, send_file
+from werkzeug.exceptions import HTTPException
 from werkzeug.serving import run_simple
 
 # Persistent state for this app lives under DATA_DIR. It defaults to
@@ -102,6 +104,17 @@ app = Flask("prompt_notes", static_folder=None)
 ACTION_LABEL = "untitled_notes_voice_action"
 REMOTE_CONNECTIONS: dict[str, tuple[float, dict[str, object], Path]] = {}
 REMOTE_CONNECTION_LOCK = threading.Lock()
+
+# Machine, model and chat choices hardly ever change but are slow to collect from a
+# linked machine (every lookup is an SSH round trip, the first also waits on a grant).
+# The last answer is kept in memory and in DATA_DIR and returned at once; once it is
+# older than CHOICE_REFRESH_SECONDS, a background refresh updates it for the next ask.
+CHOICE_CACHE_FILE = "choice_cache.json"
+CHOICE_REFRESH_SECONDS = 30.0
+Choices = dict[str, object]
+CHOICE_CACHES: dict[Path, dict[str, tuple[float, Choices]]] = {}
+CHOICE_REFRESHING: set[tuple[Path, str]] = set()
+CHOICE_LOCK = threading.Lock()
 
 
 @contextmanager
@@ -252,6 +265,89 @@ def gateway_headers() -> dict[str, str]:
     if override:
         headers["X-Latchkey-Gateway-Permissions-Override"] = override
     return headers
+
+
+def choice_cache(data_dir: Path) -> dict[str, tuple[float, Choices]]:
+    # The caller holds CHOICE_LOCK.
+    cache = CHOICE_CACHES.get(data_dir)
+    if cache is None:
+        cache = {}
+        try:
+            loaded = json.loads((data_dir / CHOICE_CACHE_FILE).read_text())
+        except (OSError, ValueError):
+            loaded = {}
+        for key, entry in loaded.items() if isinstance(loaded, dict) else ():
+            if isinstance(entry, dict) and isinstance(entry.get("saved_at"), (int, float)) and isinstance(entry.get("value"), dict):
+                cache[key] = (float(entry["saved_at"]), entry["value"])
+        CHOICE_CACHES[data_dir] = cache
+    return cache
+
+
+def remember_choice(data_dir: Path, key: str, value: Choices) -> None:
+    with CHOICE_LOCK:
+        cache = choice_cache(data_dir)
+        cache[key] = (time.time(), value)
+        snapshot = {name: {"saved_at": saved_at, "value": saved} for name, (saved_at, saved) in cache.items()}
+        try:
+            data_dir.mkdir(parents=True, exist_ok=True)
+            temporary = data_dir / f"{CHOICE_CACHE_FILE}.tmp"
+            temporary.write_text(json.dumps(snapshot))
+            temporary.replace(data_dir / CHOICE_CACHE_FILE)
+        except OSError:
+            pass  # The in-memory copy still serves; the file only speeds up a restart.
+
+
+def refresh_choice_later(data_dir: Path, key: str, collect: Callable[[], Choices], keep: Callable[[Choices], bool]) -> None:
+    with CHOICE_LOCK:
+        if (data_dir, key) in CHOICE_REFRESHING:
+            return
+        CHOICE_REFRESHING.add((data_dir, key))
+
+    def refresh() -> None:
+        try:
+            value = collect()
+            if keep(value):
+                remember_choice(data_dir, key, value)
+        except (HTTPException, OSError, ValueError, KeyError, subprocess.SubprocessError):
+            pass  # Keep serving the last good answer.
+        finally:
+            with CHOICE_LOCK:
+                CHOICE_REFRESHING.discard((data_dir, key))
+
+    threading.Thread(target=refresh, daemon=True).start()
+
+
+def cached_choice(
+    key: str, collect: Callable[[], Choices], *, fresh: bool = False, keep: Callable[[Choices], bool] = lambda value: True
+) -> Choices:
+    """The last answer for ``key`` at once (refreshed behind it), or a first collection.
+
+    ``fresh`` collects now (a refresh button); a failed or unkept collection then falls
+    back to the last good answer when there is one.
+    """
+    data_dir = DATA_DIR
+    with CHOICE_LOCK:
+        entry = choice_cache(data_dir).get(key)
+    if entry is not None and not fresh:
+        saved_at, last = entry
+        if time.time() - saved_at > CHOICE_REFRESH_SECONDS:
+            refresh_choice_later(data_dir, key, collect, keep)
+        return last
+    try:
+        value = collect()
+    except HTTPException:
+        if entry is not None:
+            return entry[1]
+        raise
+    if keep(value):
+        remember_choice(data_dir, key, value)
+    elif entry is not None:
+        return entry[1]
+    return value
+
+
+def wants_fresh() -> bool:
+    return request.args.get("fresh") == "1"
 
 
 def remote_connection(machine: str) -> tuple[dict[str, object], Path]:
@@ -489,6 +585,11 @@ def studio_workspaces() -> dict[str, Any] | None:
 
 @app.get("/api/machines")
 def linked_machines() -> Response:
+    # An unavailable answer is not kept: the last good list stays in its place.
+    return jsonify(cached_choice("machines", collect_machines, fresh=wants_fresh(), keep=lambda value: not value["unavailable"]))
+
+
+def collect_machines() -> Choices:
     current_id = os.environ.get("MNGR_AGENT_ID", "")
     payload = studio_workspaces()
     machines = []
@@ -502,7 +603,7 @@ def linked_machines() -> Response:
     if current_id and not any(machine["id"] == current_id for machine in machines):
         machines.append({"id": current_id, "name": "This machine"})
     machines.sort(key=lambda machine: (machine["id"] != current_id, machine["name"].casefold()))
-    return jsonify({"machines": machines, "current_machine_id": current_id, "unavailable": payload is None})
+    return {"machines": machines, "current_machine_id": current_id, "unavailable": payload is None}
 
 
 @app.get("/api/chat-models/<provider>")
@@ -510,8 +611,13 @@ def chat_models(provider: str) -> Response:
     harness = PROVIDER_HARNESSES.get(provider)
     if harness is None:
         abort(404)
-    machine = request.args.get("machine", "")
+    machine = request.args.get("machine", "") or os.environ.get("MNGR_AGENT_ID", "")
+    return jsonify(cached_choice(
+        f"models:{machine}:{provider}", lambda: collect_models(provider, harness, machine), fresh=wants_fresh()
+    ))
 
+
+def collect_models(provider: str, harness: str, machine: str) -> Choices:
     def choices(path: str) -> object:
         if not machine or machine == os.environ.get("MNGR_AGENT_ID", ""):
             return chat_json(path)
@@ -545,13 +651,17 @@ def chat_models(provider: str) -> Response:
         for option in options
         if option.get("in_picker")
     ]
-    return jsonify({"provider": provider, "harness": harness, "available": account is not None, "models": models})
+    return {"provider": provider, "harness": harness, "available": account is not None, "models": models}
 
 
 @app.get("/api/chat-names")
 def chat_names() -> Response:
     # The chats on the selected machine (this one by default), for follow-ups.
-    machine = request.args.get("machine", "")
+    machine = request.args.get("machine", "") or os.environ.get("MNGR_AGENT_ID", "")
+    return jsonify(cached_choice(f"chats:{machine}", lambda: collect_chat_names(machine), fresh=wants_fresh()))
+
+
+def collect_chat_names(machine: str) -> Choices:
     if not machine or machine == os.environ.get("MNGR_AGENT_ID", ""):
         payload = chat_json("/api/chats")
     else:
@@ -568,7 +678,7 @@ def chat_names() -> Response:
         for chat in payload.get("chats", [])
     ]
     chats.sort(key=lambda chat: chat["name"].casefold())
-    return jsonify({"chats": chats})
+    return {"chats": chats}
 
 
 @app.get("/api/destination-defaults")
