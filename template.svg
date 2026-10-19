@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="480" viewBox="0 0 240 160" fill="none">
+<rect width="240" height="160" rx="14" fill="#EDE6D9"/>
+<rect x="18" y="14" width="204" height="132" rx="10" fill="#FFFCF6"/>
+<path d="M18 24Q18 14 28 14H212Q222 14 222 24V36H18Z" fill="#DDD5C7"/>
+<circle cx="28" cy="25" r="2" fill="#506A80"/>
+<text x="38" y="28" font-family="sans-serif" font-size="7" fill="#263F55">Untitled Notes Voice</text>
+<text x="32" y="53" font-family="sans-serif" font-size="6" fill="#75808A">DRAFT</text>
+<text x="32" y="69" font-family="sans-serif" font-size="10" fill="#263F55">A thought worth keeping</text>
+<rect x="32" y="79" width="135" height="3" rx="1.5" fill="#CFC7BB"/>
+<rect x="32" y="89" width="159" height="3" rx="1.5" fill="#CFC7BB"/>
+<rect x="32" y="99" width="107" height="3" rx="1.5" fill="#CFC7BB"/>
+<path d="M37 119V125M43 115V129M49 118V126M55 112V132M61 117V127M67 120V124" stroke="#506A80" stroke-width="2" stroke-linecap="round"/>
+<rect x="166" y="115" width="41" height="17" rx="8.5" fill="#263F55"/>
+<text x="174" y="126" font-family="sans-serif" font-size="6" fill="#FFFCF6">Continue</text>
+<circle cx="120" cy="123" r="12" fill="#263F55"/>
+<rect x="117" y="115" width="6" height="10" rx="3" fill="#FFFCF6"/>
+<path d="M114 121V123C114 131 126 131 126 123V121M120 129V133M117 133H123" stroke="#FFFCF6" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,17 @@
+name = "untitled-notes-voice"
+display_name = "Untitled Notes Voice"
+icon = "icon.svg"
+priority = "user"
+program = "untitled-notes-voice"
+# The shell stops the app once no window shows it (a minute after the last one
+# closes) and starts it again on the next request; false keeps it running for
+# the life of the workspace. Set false if the app does work between requests
+# (a background thread, a poller, a scheduled refresh, a subscription to an
+# outside service, a job that outlives the window): a stop loses that work.
+stop_when_no_windows = false
+
+# How update-app boots a throwaway preview of this app: on a free port, over a
+# scratch copy of its data (see .agents/skills/update-app/scripts/preview_app.py).
+[preview]
+env = {PROMPT_NOTES_PORT = "{port:main}", PROMPT_NOTES_HOST = "{host}", PROMPT_NOTES_DATA_DIR = "{copy:data}"}
+copies = {data = "data/.apps/untitled-notes-voice"}

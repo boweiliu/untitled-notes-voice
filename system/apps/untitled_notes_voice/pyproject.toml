@@ -1,0 +1,30 @@
+[project]
+name = "untitled-notes-voice"
+version = "0.1.0"
+description = "Prompt drafting window with on-device voice dictation"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "flask>=3.0",
+    "flask-sock>=0.7",
+    "werkzeug>=3.0",
+]
+
+[project.scripts]
+untitled-notes-voice = "prompt_notes.runner:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/prompt_notes"]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "playwright>=1.50"]
+
+[tool.pytest.ini_options]
+markers = [
+    "browser: exercises the app in a real browser",
+    "voice_model: downloads and runs the real speech model (about 2 GB of browser memory)",
+]

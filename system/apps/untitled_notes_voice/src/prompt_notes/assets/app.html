@@ -1,0 +1,977 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>Untitled</title>
+  <style>
+    :root { font-family: ui-sans-serif, system-ui, sans-serif; color: #343a33; background: #faf9f5; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 300px; }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 1px solid #778b78; outline-offset: 3px; }
+    .app { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; padding: 27px clamp(24px, 5vw, 42px) 0; }
+    .view { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .view[hidden], [hidden] { display: none !important; }
+    .header { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+    .header-actions { display: flex; align-items: center; gap: 4px; flex: none; }
+    .title { width: 100%; min-width: 0; border: 0; padding: 0; background: transparent; color: #455144; font-family: Georgia, 'Iowan Old Style', serif; font-size: 27px; letter-spacing: -.045em; }
+    .title::placeholder { color: #a7b1a4; opacity: 1; }
+    .icon-button { display: inline-grid; place-items: center; width: 48px; height: 48px; flex: none; border: 0; padding: 0; background: transparent; color: #7e907e; }
+    .icon-button:hover { color: #344b37; }
+    .icon-button svg { display: block; width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.45; stroke-linecap: round; stroke-linejoin: round; }
+    #draft-text { flex: 1; width: 100%; min-height: 240px; margin-top: 34px; border: 0; padding: 0; resize: none; outline: none; background: transparent; color: #343a33; font-family: Georgia, 'Iowan Old Style', serif; font-size: clamp(19px, 2.6vw, 22px); line-height: 1.62; letter-spacing: -.016em; }
+    .editor-footer { display: flex; align-items: center; justify-content: space-between; min-height: 44px; border-top: 1px solid #e5e8e0; }
+    /* The controls at the bottom of each view stay pinned to the visible bottom edge (above the
+       browser's toolbar and the keyboard) however long the text above them grows. */
+    .editor-bottom, .setup-footer, .list-footer { position: sticky; bottom: 0; z-index: 3; background: #faf9f5; padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+    .editor-bottom { padding-top: 8px; }
+    .save-indicator { width: 32px; height: 32px; display: inline-grid; place-items: center; color: #8b9c8a; opacity: 0; transition: opacity .25s; }
+    .save-indicator.visible { opacity: 1; }
+    .save-indicator.error { color: #aa625b; opacity: 1; }
+    .save-indicator svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+    .section-heading { margin: 58px 0 25px; color: #445144; font-family: Georgia, 'Iowan Old Style', serif; font-size: 31px; font-weight: 400; letter-spacing: -.045em; }
+    .draft-list { display: flex; flex-direction: column; }
+    .draft-row { display: flex; width: 100%; align-items: baseline; justify-content: space-between; gap: 14px; border: 0; border-bottom: 1px solid #e5e8e0; padding: 16px 0; background: transparent; text-align: left; }
+    .draft-row:first-child { border-top: 1px solid #e5e8e0; }
+    .draft-row:hover .draft-name { color: #809781; }
+    .draft-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #495448; font-family: Georgia, 'Iowan Old Style', serif; font-size: 18px; }
+    .draft-date { flex: none; color: #a9b0a5; font-size: 10px; }
+    .list-switcher { display: flex; gap: 8px; margin: 48px 0 24px; }
+    .list-switcher .icon-button { width: 48px; height: 48px; color: #aab6a8; }
+    .list-switcher .icon-button.active { color: #4c6951; border-bottom: 1px solid #819982; }
+    .fired-status { display: inline-grid; place-items: center; width: 20px; height: 20px; flex: none; }
+    .fired-status svg { display: block; width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
+    .fired-status.sending, .fired-status.checking { color: #b49a5d; }
+    .fired-status.attention { color: #bd756d; }
+    .fired-status.attention svg { fill: currentColor; stroke: none; }
+    .fired-row { position: relative; }
+    .fired-row .machine-tip { position: absolute; right: 27px; top: 39px; z-index: 2; border: 1px solid #e4e8df; padding: 7px 9px; background: #faf9f5; box-shadow: 0 5px 16px #35433312; color: #7b8b7b; font-size: 11px; white-space: nowrap; opacity: 0; pointer-events: none; }
+    .fired-row:hover .machine-tip, .fired-row:focus-visible .machine-tip { opacity: 1; }
+    .readonly-indicator { display: inline-grid; place-items: center; width: 32px; height: 32px; }
+    .readonly-indicator[hidden] { display: none; }
+    .empty-list { margin: 0; color: #a5afa1; font-family: Georgia, 'Iowan Old Style', serif; font-style: italic; }
+    .list-footer { display: flex; justify-content: flex-end; margin-top: auto; padding-top: 20px; }
+    .choice-list { display: flex; flex-direction: column; }
+    .choice { display: flex; align-items: center; gap: 12px; width: 100%; border: 0; border-bottom: 1px solid #e5e8e0; padding: 17px 0; background: transparent; text-align: left; color: #556154; font-family: Georgia, 'Iowan Old Style', serif; font-size: 17px; }
+    .choice:first-child { border-top: 1px solid #e5e8e0; }
+    .choice-circle { width: 12px; height: 12px; border: 1px solid #abb6a9; border-radius: 50%; }
+    .choice.active .choice-circle { border-color: #627b65; background: #627b65; box-shadow: inset 0 0 0 3px #faf9f5; }
+    .choice.active { color: #314734; }
+    .fields { margin-top: 28px; }
+    #machine-fields + .fields { margin-top: 0; }
+    .field { display: flex; align-items: center; min-height: 46px; gap: 12px; border-bottom: 1px solid #e5e8e0; }
+    .field label { width: 79px; flex: none; color: #8b9989; font-size: 11px; }
+    .field input, .field select { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: #435144; font-size: 16px; min-height: 48px; }
+    .field input::placeholder { color: #acb5aa; }
+    .field .icon-button { width: 48px; height: 48px; }
+    .field .icon-button svg { width: 17px; height: 17px; }
+    .field .icon-button:disabled { color: #bdc6b9; cursor: default; }
+    .setup-footer { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-top: auto; padding-top: 28px; }
+    .setup-note { color: #a4ada2; font-size: 11px; }
+    .action { min-width: 64px; min-height: 48px; border: 0; padding: 12px 16px; background: transparent; color: #435f47; font-size: 16px; font-weight: 650; }
+    .action:hover { color: #233b27; }
+    .action:disabled { color: #a8b2a6; cursor: default; }
+    button { touch-action: manipulation; }
+    .draft-entry { display: flex; align-items: center; border-bottom: 1px solid #e5e8e0; }
+    .draft-entry:first-child { border-top: 1px solid #e5e8e0; }
+    .draft-entry .draft-row { min-width: 0; min-height: 56px; border: 0; }
+    .trash-button:hover { color: #aa625b; }
+    .empty-outbox { display: grid; place-items: center; min-height: 240px; color: #9aaa94; }
+    .empty-outbox svg { width: 80px; height: 80px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+    .list-error { color: #aa625b; font-size: 13px; }
+    .footer-actions { display: flex; align-items: center; gap: 4px; }
+    .voice-button { position: relative; border-radius: 50%; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+    .voice-button::before { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: #b4473f; opacity: 0; transform: scale(calc(.75 + var(--level, 0) * .6)); transition: transform .08s linear, opacity .2s; }
+    .voice-button svg { position: relative; }
+    .voice-button.listening { color: #faf9f5; }
+    .voice-button.listening:hover { color: #faf9f5; }
+    .voice-button.listening::before { opacity: 1; }
+    /* A steady pulse while recording, so it reads as live even when the room is quiet
+       (or the engine reports no loudness). */
+    .voice-button::after { content: ''; position: absolute; inset: 6px; border-radius: 50%; border: 2px solid #b4473f; opacity: 0; pointer-events: none; }
+    .voice-button.listening::after { animation: voice-live 1.6s ease-out infinite; }
+    @keyframes voice-live { 0% { transform: scale(.9); opacity: .55; } 100% { transform: scale(1.35); opacity: 0; } }
+    @media (prefers-reduced-motion: reduce) { .voice-button.listening::after { animation: none; opacity: .4; transform: scale(1.15); } }
+    .voice-button.starting { color: #b4473f; animation: voice-wait 1.2s ease-in-out infinite; }
+    @keyframes voice-wait { 50% { opacity: .35; } }
+    .voice-caption { min-height: 0; margin: 0 0 10px; color: #556154; font-family: Georgia, 'Iowan Old Style', serif; font-size: 17px; line-height: 1.5; }
+    .voice-caption:empty { display: none; }
+    .voice-caption .tentative { color: #a7b1a4; }
+    .voice-caption .voice-status { color: #a4ada2; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; }
+    .editor-bottom { position: sticky; }
+    .voice-menu { position: absolute; right: 0; bottom: calc(100% - 4px); z-index: 5; width: min(300px, calc(100vw - 32px)); border: 1px solid #e4e8df; padding: 6px 0; background: #faf9f5; box-shadow: 0 8px 24px #35433322; }
+    .voice-menu h2 { margin: 6px 14px 4px; color: #8b9989; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+    .voice-menu button { display: flex; width: 100%; min-height: 48px; align-items: center; gap: 10px; border: 0; padding: 6px 14px; background: transparent; color: #435144; font-size: 15px; text-align: left; }
+    .voice-menu button:hover { background: #f0f1ea; }
+    .voice-menu button:disabled { color: #b4bcb1; cursor: default; background: transparent; }
+    .voice-menu .choice-circle { flex: none; }
+    .voice-menu button[aria-checked="true"] .choice-circle { border-color: #627b65; background: #627b65; box-shadow: inset 0 0 0 3px #faf9f5; }
+    .voice-menu .model-name { flex: 1; }
+    .voice-menu .model-detail { display: block; color: #9aa596; font-size: 11px; }
+    .voice-menu .model-size { flex: none; color: #9aa596; font-size: 12px; }
+    .voice-menu p { margin: 4px 14px 6px; color: #9aa596; font-size: 11px; line-height: 1.4; }
+    .voice-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0 0 10px; color: #8b5a55; font-size: 13px; line-height: 1.45; }
+    .voice-notice a, .voice-notice button { min-height: 48px; display: inline-flex; align-items: center; border: 0; padding: 0 4px; background: transparent; color: #435f47; font-size: 14px; font-weight: 650; text-decoration: none; }
+    @media (max-width: 420px) { .app { padding: 20px 16px 0; } .header { gap: 4px; } .header-actions { gap: 0; } .title { font-size: 24px; } }
+    @media (max-height: 640px) { .section-heading { margin-top: 34px; } .fields { margin-top: 18px; } .field { min-height: 48px; } #draft-text { min-height: 96px; margin-top: 16px; } }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="view" id="editor-view" aria-label="Draft editor">
+      <header class="header">
+        <input class="title" id="draft-title" aria-label="Draft title" placeholder="Untitled" maxlength="120" autocomplete="off" spellcheck="true">
+        <div class="header-actions">
+          <button class="icon-button new-draft-button" type="button" aria-label="New draft" title="New draft"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5v15M4.5 12h15"/></svg></button>
+          <button class="icon-button" id="drafts-button" type="button" aria-label="Drafts" title="Drafts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5.5h11.5v13H7zM5 8H3.5v12.5H16"/></svg></button>
+          <button class="icon-button" id="fired-button" type="button" aria-label="Fired" title="Fired"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="6" width="17" height="12" rx="1.5"/><path d="m4.5 7 7.5 6 7.5-6"/></svg></button>
+        </div>
+      </header>
+      <textarea id="draft-text" aria-label="Draft text" spellcheck="true"></textarea>
+      <div class="editor-bottom">
+      <div class="voice-menu" id="voice-menu" role="menu" aria-label="Speech model" hidden></div>
+      <p class="voice-caption" id="voice-caption" aria-live="polite"></p>
+      <div class="voice-notice" id="voice-notice" role="alert" hidden><span id="voice-notice-text"></span><a id="voice-open-tab" href="/" target="_blank" rel="noopener" hidden>Open in its own tab</a><button id="voice-notice-close" type="button" aria-label="Dismiss">Dismiss</button></div>
+      <footer class="editor-footer">
+        <span class="save-indicator" id="save-indicator" aria-live="polite" aria-label=""><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.6 2.8L16 9"/></svg></span>
+        <span class="fired-status readonly-indicator" id="readonly-status" role="img" hidden></span>
+        <div class="footer-actions">
+          <button class="icon-button voice-button" id="voice-button" type="button" aria-label="Start dictation" aria-pressed="false" aria-haspopup="menu" title="Dictate (right-click or hold for models)"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/></svg></button>
+          <button class="icon-button" id="continue-button" type="button" aria-label="Continue" title="Continue"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12h14M13 6.5l5.5 5.5-5.5 5.5"/></svg></button>
+          <button class="icon-button" id="copy-button" type="button" aria-label="Copy text" title="Copy text" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="12" rx="1.5"/><path d="M15.5 8V5.5A1.5 1.5 0 0 0 14 4H6a1.5 1.5 0 0 0-1.5 1.5V15A1.5 1.5 0 0 0 6 16.5h2"/></svg></button>
+        </div>
+      </footer>
+      </div>
+    </section>
+    <section class="view" id="drafts-view" aria-label="Drafts" hidden>
+      <header class="header"><button class="icon-button back-button" type="button" aria-label="Back to editor" title="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12h-14M11 6.5 5.5 12l5.5 5.5"/></svg></button></header>
+      <nav class="list-switcher" aria-label="Notes"><button class="icon-button active" id="list-drafts" type="button" aria-label="Drafts" title="Drafts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5.5h11.5v13H7zM5 8H3.5v12.5H16"/></svg></button><button class="icon-button" id="list-fired" type="button" aria-label="Fired" title="Fired"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="6" width="17" height="12" rx="1.5"/><path d="m4.5 7 7.5 6 7.5-6"/></svg></button></nav>
+      <div class="draft-list" id="draft-list"></div>
+      <p id="list-error" class="list-error" role="alert" hidden></p>
+      <div class="list-footer"><button class="icon-button new-draft-button" type="button" aria-label="New draft" title="New draft"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5v15M4.5 12h15"/></svg></button></div>
+    </section>
+    <section class="view" id="setup-view" aria-label="Choose destination" hidden>
+      <header class="header"><button class="icon-button back-button" type="button" aria-label="Back to editor" title="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12h-14M11 6.5 5.5 12l5.5 5.5"/></svg></button></header>
+      <h1 class="section-heading">Destination</h1>
+      <div class="choice-list">
+        <button class="choice active" id="new-chat" type="button" aria-pressed="true"><span class="choice-circle" aria-hidden="true"></span>New chat</button>
+        <button class="choice" id="follow-up" type="button" aria-pressed="false"><span class="choice-circle" aria-hidden="true"></span>Follow-up</button>
+      </div>
+      <div class="fields" id="machine-fields">
+        <div class="field"><label for="machine">Machine</label><select id="machine"><option value="">Loading machines…</option></select><button class="icon-button" id="refresh-machines" type="button" aria-label="Refresh linked machines" title="Refresh linked machines"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.7-4.3M4 4v4.5h4.5M4 13a8 8 0 0 0 14.7 4.3M20 20v-4.5h-4.5"/></svg></button></div>
+      </div>
+      <div class="fields" id="new-chat-fields">
+        <div class="field"><label for="chat-name">Chat name</label><input id="chat-name" type="text" placeholder="&lt;default&gt;" autocomplete="off"></div>
+        <div class="field"><label for="provider">Provider</label><select id="provider"><option value="claude">Claude</option><option value="codex">Codex</option><option value="agy">Agy</option><option value="pi-dev">Pi-dev</option></select></div>
+        <div class="field"><label for="model">Model</label><select id="model"><option value="">Loading models…</option></select></div>
+        <div class="field"><label for="effort">Effort</label><select id="effort"><option value="">Choose model first</option></select></div>
+      </div>
+      <div class="fields" id="followup-fields" hidden><div class="field"><label for="target-chat">Chat</label><select id="target-chat"><option value="">Loading chats…</option></select></div></div>
+      <footer class="setup-footer"><span class="setup-note" id="setup-note"></span><button class="action" id="preview-button" type="button">Send</button></footer>
+    </section>
+  </main>
+  <script src="/voice/voice_session.js"></script>
+  <script src="/voice/voice_capture.js"></script>
+  <script src="/voice/voice_streaming.js"></script>
+  <script>
+    const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const views = {
+      editor: document.getElementById('editor-view'),
+      drafts: document.getElementById('drafts-view'),
+      setup: document.getElementById('setup-view')
+    };
+    const titleInput = document.getElementById('draft-title');
+    const bodyInput = document.getElementById('draft-text');
+    const indicator = document.getElementById('save-indicator');
+    const list = document.getElementById('draft-list');
+    const SAVE_DELAY_MS = 1600;
+    let drafts = [];
+    let currentKey = null;
+    let timer = null;
+    let saving = false;
+    let savedTimer = null;
+    let activeView = 'editor';
+    let hasInteracted = false;
+    let fired = [];
+    let firedLoaded = false;
+    let currentFired = null;
+    let listMode = 'drafts';
+    const providerInput = document.getElementById('provider');
+    const machineInput = document.getElementById('machine');
+    const refreshMachinesButton = document.getElementById('refresh-machines');
+    const modelInput = document.getElementById('model');
+    const effortInput = document.getElementById('effort');
+    const chatNameInput = document.getElementById('chat-name');
+    const targetChatInput = document.getElementById('target-chat');
+    let defaults = { provider: 'claude', by_provider: {} };
+    const DEFAULTS_KEY = 'prompt-notes.defaults.v1';
+    let defaultsChanged = false;
+    let localDefaultsReady = false;
+    try {
+      const cached = JSON.parse(localStorage.getItem(DEFAULTS_KEY) || 'null');
+      if (cached && [...providerInput.options].some(option => option.value === cached.provider) && cached.by_provider) {
+        defaults = cached; providerInput.value = defaults.provider; localDefaultsReady = true;
+      }
+    } catch (_) {}
+    let defaultsReady = Promise.resolve();
+    let defaultsWrite = Promise.resolve();
+    let models = [];
+    let modelRequest = 0;
+    const MODEL_CACHE_KEY = 'prompt-notes.models.v2';
+    const MODEL_CACHE_MAX_AGE = 24 * 60 * 60 * 1000;
+    const modelCache = new Map();
+    const modelFetches = new Map();
+    try {
+      const cached = JSON.parse(localStorage.getItem(MODEL_CACHE_KEY) || '{}');
+      for (const [key, entry] of Object.entries(cached)) {
+        if (entry && Date.now() - entry.savedAt < MODEL_CACHE_MAX_AGE && validModels(entry.data)) {
+          modelCache.set(key, entry);
+        }
+      }
+    } catch (_) { /* Storage can be disabled or hold an older format. */ }
+    function validModels(data) {
+      return data && Array.isArray(data.models) && data.models.every(model =>
+        typeof model.id === 'string' && typeof model.label === 'string' && Array.isArray(model.efforts));
+    }
+    function modelMachine() { return machineInput.value || defaults.machine || ''; }
+    function modelKey(provider, machine = modelMachine()) { return `${machine}:${provider}`; }
+    function fetchModels(provider, machine = modelMachine()) {
+      const key = modelKey(provider, machine);
+      if (modelFetches.has(key)) return modelFetches.get(key);
+      const pending = api(`/api/chat-models/${encodeURIComponent(provider)}?machine=${encodeURIComponent(machine)}`).then(data => {
+        if (!validModels(data)) throw new Error('Invalid model choices');
+        modelCache.set(key, { savedAt: Date.now(), data });
+        try { localStorage.setItem(MODEL_CACHE_KEY, JSON.stringify(Object.fromEntries(modelCache))); } catch (_) {}
+        return data;
+      }).finally(() => modelFetches.delete(key));
+      modelFetches.set(key, pending);
+      return pending;
+    }
+    function warmModels() {
+      for (const option of providerInput.options) {
+        const provider = option.value;
+        const machine = modelMachine();
+        fetchModels(provider, machine).then(data => {
+          if (modelMachine() === machine && providerInput.value === provider && activeView === 'setup') applyModels(data);
+        }).catch(() => {});
+      }
+    }
+    let chatNameEdited = false;
+    let machinesLoaded = false;
+
+    function show(name) {
+      if (name !== 'editor') stopVoice();
+      activeView = name;
+      for (const [key, node] of Object.entries(views)) node.hidden = key !== name;
+      if (name === 'editor') bodyInput.focus();
+    }
+    function hideIndicator() {
+      clearTimeout(savedTimer);
+      indicator.classList.remove('visible', 'error');
+      indicator.setAttribute('aria-label', '');
+    }
+    function showSaved() {
+      indicator.classList.remove('error');
+      indicator.classList.add('visible');
+      indicator.setAttribute('aria-label', 'Saved');
+      clearTimeout(savedTimer);
+      savedTimer = setTimeout(hideIndicator, 1800);
+    }
+    function showSaveError() {
+      indicator.classList.add('error');
+      indicator.classList.add('visible');
+      indicator.setAttribute('aria-label', 'Could not save');
+      indicator.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v6M12 17h.01"/></svg>';
+    }
+    function localDraft() {
+      return { id: `local-${crypto.randomUUID()}`, title: '', body: '', updated_at: Date.now() / 1000, dirty: false, version: 0 };
+    }
+    function currentDraft() { return drafts.find(draft => draft.id === currentKey); }
+    function displayDraft(draft) {
+      if (voiceTarget && voiceTarget !== draft) stopVoice();
+      currentFired = null;
+      currentKey = draft.id;
+      titleInput.value = draft.title;
+      bodyInput.value = draft.body;
+      titleInput.readOnly = false;
+      bodyInput.readOnly = false;
+      indicator.hidden = false;
+      document.getElementById('readonly-status').hidden = true;
+      document.getElementById('continue-button').hidden = false;
+      document.getElementById('voice-button').hidden = false;
+      document.getElementById('copy-button').hidden = true;
+      document.title = draft.title || 'Untitled';
+      chatNameInput.value = draft.title;
+      chatNameEdited = false;
+      hideIndicator();
+      show('editor');
+    }
+    function statusIcon(state) {
+      if (state === 'sending') return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="6" width="17" height="12" rx="1.5"/><path d="m4.5 7 7.5 6 7.5-6"/></svg>';
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/></svg>';
+    }
+    function displayFired(action) {
+      stopVoice();
+      currentFired = action;
+      titleInput.value = action.title;
+      bodyInput.value = action.body;
+      titleInput.readOnly = true;
+      bodyInput.readOnly = true;
+      document.title = action.title || 'Untitled';
+      hideIndicator();
+      indicator.hidden = true;
+      const status = document.getElementById('readonly-status');
+      status.className = `fired-status readonly-indicator ${action.state}`;
+      status.innerHTML = statusIcon(action.state);
+      status.setAttribute('aria-label', action.state === 'attention' ? 'Needs attention' : action.state === 'sending' ? 'Sending' : 'Checking');
+      status.title = status.getAttribute('aria-label');
+      status.hidden = false;
+      document.getElementById('continue-button').hidden = true;
+      document.getElementById('voice-button').hidden = true;
+      document.getElementById('copy-button').hidden = false;
+      show('editor');
+    }
+    function scheduleSave() {
+      hideIndicator();
+      clearTimeout(timer);
+      timer = setTimeout(saveDirty, SAVE_DELAY_MS);
+    }
+    function changed(field) {
+      if (currentFired) return;
+      const draft = currentDraft();
+      if (!draft) return;
+      hasInteracted = true;
+      if (field === 'title') {
+        draft.title = titleInput.value.trim();
+        document.title = draft.title || 'Untitled';
+        if (!chatNameEdited) chatNameInput.value = draft.title;
+      } else draft.body = bodyInput.value;
+      draft.updated_at = Date.now() / 1000;
+      draft.version += 1;
+      draft.dirty = true;
+      scheduleSave();
+    }
+    async function api(path, options = {}) {
+      const response = await fetch(path, { ...options, headers: { 'Content-Type': 'application/json' } });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        throw new Error(detail.description || detail.detail || 'Could not save or send.');
+      }
+      return response.json();
+    }
+    async function saveDirty() {
+      clearTimeout(timer);
+      if (saving) return;
+      saving = true;
+      let failed = false;
+      let savedCurrent = false;
+      for (const draft of drafts.filter(item => item.dirty)) {
+        const version = draft.version;
+        const payload = JSON.stringify({ title: draft.title, body: draft.body });
+        try {
+          const isNew = draft.id.startsWith('local-');
+          const saved = await api(isNew ? '/api/drafts' : `/api/drafts/${encodeURIComponent(draft.id)}`, { method: isNew ? 'POST' : 'PATCH', body: payload });
+          if (isNew) { if (currentKey === draft.id) currentKey = saved.id; draft.id = saved.id; }
+          if (draft.version === version) {
+            draft.dirty = false;
+            draft.updated_at = saved.updated_at;
+            if (draft.id === currentKey) savedCurrent = true;
+          }
+        } catch (_) { failed = true; }
+      }
+      saving = false;
+      if (failed) showSaveError();
+      else if (savedCurrent && !drafts.some(item => item.dirty)) {
+        indicator.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.6 2.8L16 9"/></svg>';
+        showSaved();
+      }
+      if (!failed && drafts.some(item => item.dirty)) scheduleSave();
+    }
+    function renderDrafts() {
+      list.replaceChildren();
+      document.getElementById('list-drafts').classList.toggle('active', listMode === 'drafts');
+      document.getElementById('list-fired').classList.toggle('active', listMode === 'fired');
+      if (listMode === 'fired') {
+        if (firedLoaded && !fired.length) {
+          const empty = document.createElement('div');
+          empty.className = 'empty-outbox'; empty.setAttribute('role', 'img');
+          empty.setAttribute('aria-label', 'Outbox empty');
+          empty.innerHTML = '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="m15 33 11 11 24-25"/></svg>';
+          list.append(empty);
+        }
+        for (const action of fired) {
+          const row = document.createElement('button'); row.type = 'button'; row.className = 'draft-row fired-row';
+          row.setAttribute('aria-label', `${action.title || 'Untitled'}, ${action.state === 'attention' ? 'needs attention' : action.state}`);
+          const name = document.createElement('span'); name.className = 'draft-name'; name.textContent = action.title || 'Untitled';
+          const status = document.createElement('span'); status.className = `fired-status ${action.state}`; status.innerHTML = statusIcon(action.state);
+          const tip = document.createElement('span'); tip.className = 'machine-tip';
+          tip.textContent = action.destination.machine_name || action.destination.chat_name || 'This machine';
+          row.append(name, status, tip); row.addEventListener('click', () => displayFired(action)); list.append(row);
+        }
+        return;
+      }
+      if (!drafts.length) { const empty = document.createElement('p'); empty.className = 'empty-list'; empty.textContent = 'No drafts yet.'; list.append(empty); return; }
+      for (const draft of [...drafts].sort((a, b) => b.updated_at - a.updated_at)) {
+        const row = document.createElement('button'); row.type = 'button'; row.className = 'draft-row';
+        const name = document.createElement('span'); name.className = 'draft-name'; name.textContent = draft.title || 'Untitled';
+        row.append(name); row.addEventListener('click', () => displayDraft(draft));
+        const entry = document.createElement('div'); entry.className = 'draft-entry';
+        const trash = document.createElement('button'); trash.type = 'button'; trash.className = 'icon-button trash-button';
+        trash.setAttribute('aria-label', `Delete ${draft.title || 'Untitled'}`); trash.title = 'Delete draft';
+        trash.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7"/></svg>';
+        trash.addEventListener('click', async () => {
+          if (!confirm(`Delete “${draft.title || 'Untitled'}”? This cannot be undone.`)) return;
+          trash.disabled = true;
+          const error = document.getElementById('list-error'); error.hidden = true;
+          try {
+            // Let an in-flight initial save assign its server id before deleting.
+            clearTimeout(timer);
+            while (saving) await delay(50);
+            if (!draft.id.startsWith('local-')) await api(`/api/drafts/${encodeURIComponent(draft.id)}`, { method: 'DELETE' });
+            drafts = drafts.filter(item => item !== draft);
+            if (currentKey === draft.id) currentKey = null;
+            renderDrafts();
+          } catch (_) {
+            error.textContent = 'Could not delete draft. Try again.'; error.hidden = false; trash.disabled = false;
+          } finally { if (drafts.some(item => item.dirty)) scheduleSave(); }
+        });
+        entry.append(row, trash); list.append(entry);
+      }
+    }
+    function setOptions(select, options, emptyLabel) {
+      select.replaceChildren();
+      if (!options.length) {
+        const option = new Option(emptyLabel, '');
+        select.add(option);
+        select.disabled = true;
+        return;
+      }
+      select.disabled = false;
+      for (const item of options) select.add(new Option(item.label, item.id));
+    }
+    function providerDefaults() {
+      return defaults.by_provider[providerInput.value] ||= { model: '', effort_by_model: {} };
+    }
+    function saveDefaults() {
+      defaultsChanged = true;
+      defaults.updated_at = Date.now();
+      const snapshot = JSON.stringify(defaults);
+      try { localStorage.setItem(DEFAULTS_KEY, snapshot); } catch (_) {}
+      defaultsWrite = defaultsWrite.catch(() => {}).then(() => api('/api/destination-defaults', { method: 'PUT', body: snapshot }));
+      defaultsWrite.catch(showSaveError);
+    }
+    async function loadMachines(force = false) {
+      if (machinesLoaded && !force) return;
+      refreshMachinesButton.disabled = true;
+      try {
+        const data = await api('/api/machines');
+        const choices = data.machines.map(machine => ({ id: machine.id, label: machine.name }));
+        const preferred = defaults.machine;
+        if (preferred && !choices.some(machine => machine.id === preferred) && data.unavailable) {
+          choices.push({ id: preferred, label: `${defaults.machine_name || 'Selected machine'} (unavailable)` });
+        }
+        setOptions(machineInput, choices, 'Machines unavailable');
+        const selected = choices.some(machine => machine.id === preferred) ? preferred : data.current_machine_id;
+        if (selected && choices.some(machine => machine.id === selected)) machineInput.value = selected;
+        if (machineInput.value && machineInput.value !== defaults.machine) {
+          defaults.machine = machineInput.value;
+          defaults.machine_name = choices.find(machine => machine.id === machineInput.value)?.label || '';
+          saveDefaults();
+        }
+        document.getElementById('setup-note').textContent = data.unavailable ? 'Linked machines unavailable.' : '';
+        machinesLoaded = !data.unavailable;
+        warmModels();
+        loadModels();
+        if (followUpMode()) loadChats();
+      } catch (_) {
+        setOptions(machineInput, [], 'Machines unavailable');
+        document.getElementById('setup-note').textContent = 'Linked machines unavailable.';
+      } finally {
+        refreshMachinesButton.disabled = false;
+      }
+    }
+    function populateEfforts() {
+      const model = models.find(item => item.id === modelInput.value);
+      const efforts = (model?.efforts || []).map(level => ({ id: level, label: level }));
+      setOptions(effortInput, efforts, model ? 'No effort setting' : 'Choose model first');
+      const preferred = providerDefaults().effort_by_model[modelInput.value];
+      if (efforts.some(item => item.id === preferred)) effortInput.value = preferred;
+      if (model && efforts.length && !efforts.some(item => item.id === preferred)) {
+        providerDefaults().effort_by_model[model.id] = effortInput.value;
+        saveDefaults();
+      }
+    }
+    function applyModels(data) {
+      const previous = modelInput.value;
+      models = data.models;
+      setOptions(modelInput, models, data.available ? 'No models available' : 'Provider unavailable');
+      const preferred = providerDefaults().model || previous;
+      if (models.some(item => item.id === preferred)) modelInput.value = preferred;
+      if (models.length && !models.some(item => item.id === preferred)) {
+        providerDefaults().model = modelInput.value;
+        saveDefaults();
+      }
+      populateEfforts();
+    }
+    async function loadModels() {
+      const request = ++modelRequest;
+      const provider = providerInput.value;
+      const machine = modelMachine();
+      const cached = modelCache.get(modelKey(provider, machine));
+      if (cached) { applyModels(cached.data); return; }
+      models = [];
+      setOptions(modelInput, [], 'Loading models…');
+      setOptions(effortInput, [], 'Choose model first');
+      try {
+        const data = await fetchModels(provider, machine);
+        if (request === modelRequest && machine === modelMachine()) applyModels(data);
+      } catch (_) {
+        if (request === modelRequest) {
+          setOptions(modelInput, [], 'Models unavailable');
+          setOptions(effortInput, [], 'Choose model first');
+        }
+      }
+    }
+    // Follow-up targets are the chats on the selected machine, fetched once per machine
+    // (the refresh button refetches) and kept while the page is open.
+    const chatsByMachine = new Map();
+    let chatRequest = 0;
+    function showChats(chats) {
+      const counts = new Map();
+      for (const chat of chats) counts.set(chat.name, (counts.get(chat.name) || 0) + 1);
+      setOptions(targetChatInput, chats.map(chat => ({
+        id: chat.id,
+        label: counts.get(chat.name) > 1 ? `${chat.name} · ${chat.id.slice(0, 8)}` : chat.name
+      })), 'No chats yet');
+    }
+    async function loadChats(force = false) {
+      const request = ++chatRequest;
+      const machine = modelMachine();
+      if (!force && chatsByMachine.has(machine)) { showChats(chatsByMachine.get(machine)); return; }
+      setOptions(targetChatInput, [], 'Loading chats…');
+      try {
+        const data = await api(`/api/chat-names?machine=${encodeURIComponent(machine)}`);
+        chatsByMachine.set(machine, data.chats);
+        if (request === chatRequest) showChats(data.chats);
+      } catch (_) {
+        if (request === chatRequest) setOptions(targetChatInput, [], 'Chats unavailable');
+      }
+    }
+    function followUpMode() { return document.getElementById('follow-up').getAttribute('aria-pressed') === 'true'; }
+    function selectMode(mode) {
+      for (const button of [document.getElementById('new-chat'), document.getElementById('follow-up')]) {
+        const selected = button.id === mode;
+        button.classList.toggle('active', selected);
+        button.setAttribute('aria-pressed', String(selected));
+      }
+      document.getElementById('new-chat-fields').hidden = mode !== 'new-chat';
+      document.getElementById('followup-fields').hidden = mode !== 'follow-up';
+      loadMachines();
+      if (mode === 'follow-up') loadChats();
+      else loadModels();
+    }
+    titleInput.addEventListener('input', () => changed('title'));
+    bodyInput.addEventListener('input', () => changed('body'));
+    chatNameInput.addEventListener('input', () => { chatNameEdited = true; });
+    machineInput.addEventListener('change', () => {
+      defaults.machine = machineInput.value;
+      defaults.machine_name = machineInput.selectedOptions[0]?.textContent || '';
+      saveDefaults();
+      warmModels();
+      loadModels();
+      if (followUpMode()) loadChats();
+    });
+    refreshMachinesButton.addEventListener('click', () => { loadMachines(true); if (followUpMode()) loadChats(true); });
+    providerInput.addEventListener('change', () => {
+      defaults.provider = providerInput.value;
+      saveDefaults();
+      loadModels();
+    });
+    modelInput.addEventListener('change', () => {
+      providerDefaults().model = modelInput.value;
+      saveDefaults();
+      populateEfforts();
+    });
+    effortInput.addEventListener('change', () => {
+      providerDefaults().effort_by_model[modelInput.value] = effortInput.value;
+      saveDefaults();
+    });
+    async function refreshFired() {
+      try {
+        const data = await api('/api/fired');
+        fired = data.actions;
+        firedLoaded = true;
+        if (listMode === 'fired' && activeView === 'drafts') renderDrafts();
+        if (currentFired) {
+          const fresh = fired.find(action => action.id === currentFired.id);
+          if (fresh && (fresh.state !== currentFired.state || fresh.error !== currentFired.error)) displayFired(fresh);
+          else if (!fresh) { currentFired = null; createDraft(); }
+        }
+      } catch (_) { /* Keep the last visible state until connection returns. */ }
+    }
+    function showList(mode) {
+      hasInteracted = true;
+      currentFired = null;
+      listMode = mode;
+      if (mode === 'fired') refreshFired();
+      renderDrafts(); show('drafts');
+    }
+    document.getElementById('drafts-button').addEventListener('click', () => showList('drafts'));
+    document.getElementById('fired-button').addEventListener('click', () => showList('fired'));
+    document.getElementById('list-drafts').addEventListener('click', () => showList('drafts'));
+    document.getElementById('list-fired').addEventListener('click', () => showList('fired'));
+    document.getElementById('copy-button').addEventListener('click', async () => {
+      if (!currentFired) return;
+      await navigator.clipboard.writeText(currentFired.body);
+    });
+    setInterval(() => { if (activeView === 'drafts' && listMode === 'fired' || currentFired) refreshFired(); }, 2500);
+    function createDraft() {
+      hasInteracted = true;
+      const current = currentDraft();
+      if (current?.id.startsWith('local-') && !current.title && !current.body && !current.dirty) {
+        drafts = drafts.filter(draft => draft !== current);
+      }
+      const draft = localDraft();
+      drafts.unshift(draft);
+      displayDraft(draft);
+      titleInput.focus();
+    }
+    document.querySelectorAll('.new-draft-button').forEach(button => button.addEventListener('click', createDraft));
+    document.getElementById('continue-button').addEventListener('click', async () => {
+      await defaultsReady;
+      show('setup');
+      selectMode(document.getElementById('follow-up').getAttribute('aria-pressed') === 'true' ? 'follow-up' : 'new-chat');
+    });
+    document.querySelectorAll('.back-button').forEach(button => button.addEventListener('click', () => {
+      if (currentFired) { showList('fired'); return; }
+      const draft = currentDraft();
+      if (draft) displayDraft(draft);
+      else createDraft();
+    }));
+    document.getElementById('new-chat').addEventListener('click', () => selectMode('new-chat'));
+    document.getElementById('follow-up').addEventListener('click', () => selectMode('follow-up'));
+    document.getElementById('preview-button').addEventListener('click', async event => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      const note = document.getElementById('setup-note');
+      note.textContent = '';
+      try {
+        clearTimeout(timer);
+        for (let attempt = 0; saving && attempt < 200; attempt++) await delay(50);
+        await saveDirty();
+        const draft = currentDraft();
+        if (!draft || draft.dirty || draft.id.startsWith('local-')) throw new Error('Draft could not be saved.');
+        const followUp = document.getElementById('follow-up').getAttribute('aria-pressed') === 'true';
+        const destination = followUp
+          ? { mode: 'follow-up', chat_id: targetChatInput.value, machine: machineInput.value,
+              machine_name: machineInput.selectedOptions[0]?.textContent || 'This machine',
+              chat_name: targetChatInput.selectedOptions[0]?.textContent || '' }
+          : { mode: 'new', chat_name: chatNameInput.value.trim(), machine: machineInput.value,
+              machine_name: machineInput.selectedOptions[0]?.textContent || '', provider: providerInput.value,
+              model: modelInput.value, effort: effortInput.value };
+        if (followUp && !destination.chat_id || !followUp && (!destination.model || !destination.machine)) {
+          throw new Error('Choose a destination.');
+        }
+        const action = await api('/api/fire', { method: 'POST', body: JSON.stringify({ draft_id: draft.id, destination }) });
+        fired.unshift(action);
+        drafts = drafts.filter(item => item.id !== draft.id);
+        createDraft();
+      } catch (error) {
+        note.textContent = error.message || 'Could not send.';
+      } finally { button.disabled = false; }
+    });
+    // ---- Dictation: on-device speech-to-text into the open draft (voice_capture.js) ----
+    const voiceButton = document.getElementById('voice-button');
+    const voiceCaption = document.getElementById('voice-caption');
+    const voiceNotice = document.getElementById('voice-notice');
+    const VOICE_USED_KEY = 'untitled-notes-voice.voice-used.v1';
+    const framed = window.top !== window;
+    const preferCpu = matchMedia('(pointer: coarse)').matches;
+    let voiceState = 'idle';   // idle | starting | listening
+    let voiceHandle = null;
+    let voiceWarm = null;
+    let voiceTarget = null;    // the draft dictation writes into, kept for a turn that finishes after stopping
+    let voiceSession = 0;
+    function microphoneAllowedHere() {
+      // A frame without the microphone delegated is refused before any prompt can appear.
+      const policy = document.permissionsPolicy || document.featurePolicy;
+      try { return policy ? policy.allowsFeature('microphone') : null; } catch (_) { return null; }
+    }
+    function setVoiceState(state) {
+      voiceState = state;
+      voiceButton.classList.toggle('starting', state === 'starting');
+      voiceButton.classList.toggle('listening', state === 'listening');
+      voiceButton.setAttribute('aria-pressed', String(state !== 'idle'));
+      voiceButton.setAttribute('aria-label', state === 'idle' ? 'Start dictation' : 'Stop dictation');
+      voiceButton.title = state === 'idle' ? 'Dictate (right-click or hold for models)' : 'Stop dictating';
+      if (state !== 'listening') { shownLevel = 0; voiceButton.style.setProperty('--level', 0); }
+    }
+    function showVoiceNotice(text, offerTab) {
+      document.getElementById('voice-notice-text').textContent = text;
+      const link = document.getElementById('voice-open-tab');
+      link.href = location.href;
+      link.hidden = !offerTab;
+      voiceNotice.hidden = false;
+    }
+    function renderCaption(stable, tentative, status) {
+      voiceCaption.replaceChildren();
+      if (status) {
+        const note = document.createElement('span'); note.className = 'voice-status'; note.textContent = status;
+        voiceCaption.append(note); return;
+      }
+      if (stable) voiceCaption.append(document.createTextNode(stable + (tentative ? ' ' : '')));
+      if (tentative) { const rest = document.createElement('span'); rest.className = 'tentative'; rest.textContent = tentative; voiceCaption.append(rest); }
+    }
+    // The driver reports min(1, 4 x RMS). Phone microphones (noise suppression, automatic
+    // gain) deliver speech many times quieter than a desktop mic, which left the swell
+    // invisible there, so show loudness on a decibel scale: -55 dB is still, -15 dB full.
+    // It rises at once and falls back gently.
+    let shownLevel = 0;
+    function showLevel(level) {
+      const rms = Math.max(level / 4, 1e-5);
+      const loudness = Math.min(1, Math.max(0, (20 * Math.log10(rms) + 55) / 40));
+      shownLevel = loudness > shownLevel ? loudness : shownLevel * 0.85 + loudness * 0.15;
+      voiceButton.style.setProperty('--level', shownLevel.toFixed(2));
+    }
+    function loadingLabel(detail) { return `Loading voice${detail ? ' ' + detail : ''}…`; }
+    function micProblem(error) {
+      const name = error && error.name;
+      if (name === 'NotAllowedError' || name === 'SecurityError') {
+        if (framed) return ['The microphone is blocked inside this window.', true];
+        return ['Microphone access is off for this page. Allow it in your browser’s site settings, then try again.', false];
+      }
+      if (name === 'NotFoundError' || name === 'OverconstrainedError') return ['No microphone was found.', false];
+      if (name === 'NotReadableError') return ['The microphone is in use by another app.', false];
+      if (/load/i.test((error && error.message) || '')) return ['Dictation could not load. Check the connection and try again.', false];
+      return [`Dictation stopped: ${(error && error.message) || 'something went wrong'}.`, false];
+    }
+    function insertDictation(text) {
+      const target = voiceTarget;
+      if (!target || !text) return;
+      if (currentDraft() === target && !currentFired) {
+        const value = bodyInput.value;
+        const start = bodyInput.selectionStart ?? value.length;
+        const end = bodyInput.selectionEnd ?? value.length;
+        const before = value.slice(0, start), after = value.slice(end);
+        const insert = (before && !/\s$/.test(before) ? ' ' : '') + text + (after && !/^\s/.test(after) ? ' ' : '');
+        bodyInput.setRangeText(insert, start, end, 'end');
+        changed('body');
+        return;
+      }
+      target.body += (target.body && !/\s$/.test(target.body) ? ' ' : '') + text;
+      target.updated_at = Date.now() / 1000;
+      target.version += 1;
+      target.dirty = true;
+      scheduleSave();
+    }
+    // Speech models, switched from the mic button's menu (right-click, or press and hold).
+    // Base runs through voice_capture.js; the v2 streaming models through voice_streaming.js.
+    const VOICE_ENGINES = [
+      { id: 'base', name: 'Moonshine Base', detail: 'Original · about 10% of words wrong', size: '63 MB' },
+      { id: 'v2-tiny', arch: 'TinyStreaming', name: 'Moonshine v2 Tiny', detail: 'Streaming · about 12% wrong', size: '51 MB' },
+      { id: 'v2-small', arch: 'SmallStreaming', name: 'Moonshine v2 Small', detail: 'Streaming · about 8% wrong', size: '165 MB' },
+      { id: 'v2-medium', arch: 'MediumStreaming', name: 'Moonshine v2 Medium', detail: 'Streaming · about 7% wrong', size: '304 MB' },
+    ];
+    const VOICE_ENGINE_KEY = 'untitled-notes-voice.engine.v1';
+    const voiceMenu = document.getElementById('voice-menu');
+    function currentEngine() {
+      let chosen = null;
+      try { chosen = localStorage.getItem(VOICE_ENGINE_KEY); } catch (_) {}
+      return VOICE_ENGINES.find(engine => engine.id === chosen) || VOICE_ENGINES[0];
+    }
+    function renderVoiceMenu() {
+      const selected = currentEngine();
+      voiceMenu.replaceChildren();
+      const heading = document.createElement('h2'); heading.textContent = 'Speech model'; voiceMenu.append(heading);
+      for (const engine of VOICE_ENGINES) {
+        const option = document.createElement('button');
+        option.type = 'button'; option.setAttribute('role', 'menuitemradio'); option.dataset.engine = engine.id;
+        option.setAttribute('aria-checked', String(engine === selected));
+        option.disabled = Boolean(engine.arch) && !window.crossOriginIsolated;
+        option.innerHTML = '<span class="choice-circle" aria-hidden="true"></span><span class="model-name"></span><span class="model-size"></span>';
+        option.querySelector('.model-name').textContent = engine.name;
+        const detail = document.createElement('span'); detail.className = 'model-detail'; detail.textContent = engine.detail;
+        option.querySelector('.model-name').append(detail);
+        option.querySelector('.model-size').textContent = engine.size;
+        option.addEventListener('click', () => {
+          try { localStorage.setItem(VOICE_ENGINE_KEY, engine.id); } catch (_) {}
+          stopVoice();
+          closeVoiceMenu();
+        });
+        voiceMenu.append(option);
+      }
+      const note = document.createElement('p');
+      note.textContent = window.crossOriginIsolated
+        ? 'Sizes are one-time downloads, kept by the browser.'
+        : (framed ? 'The v2 models work when the page is open in its own tab.' : 'The v2 models are not supported in this browser.');
+      voiceMenu.append(note);
+    }
+    function openVoiceMenu() { renderVoiceMenu(); voiceMenu.hidden = false; voiceMenu.querySelector('[aria-checked="true"]')?.focus(); }
+    function closeVoiceMenu() { voiceMenu.hidden = true; }
+    document.addEventListener('pointerdown', event => {
+      if (!voiceMenu.hidden && !voiceMenu.contains(event.target) && !voiceButton.contains(event.target)) closeVoiceMenu();
+    });
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') closeVoiceMenu(); });
+    async function startStreamingVoice(draft, engine) {
+      if (!window.crossOriginIsolated) {
+        showVoiceNotice(framed ? `${engine.name} works when the page is open in its own tab.` : `${engine.name} is not supported in this browser.`, framed);
+        return;
+      }
+      const session = ++voiceSession;
+      voiceTarget = draft;
+      setVoiceState('starting');
+      renderCaption('', '', 'Starting microphone…');
+      // The microphone first: a blocked or refused one should not cost a model download.
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(track => track.stop());
+      } catch (error) {
+        if (session !== voiceSession) return;
+        const [text, offerTab] = micProblem(error);
+        stopVoice(); showVoiceNotice(text, offerTab);
+        return;
+      }
+      if (session !== voiceSession) return;
+      try { localStorage.setItem(VOICE_USED_KEY, '1'); } catch (_) {}
+      const loading = detail => `Loading ${engine.name}${detail ? ' ' + detail : ''}…`;
+      try {
+        const handle = await MoonshineStreaming.start({
+          arch: engine.arch,
+          onStatus: (status, detail) => { if (session === voiceSession && voiceState === 'starting') renderCaption('', '', loading(detail)); },
+          onListening: () => { if (session === voiceSession) { setVoiceState('listening'); renderCaption('', '', 'Listening…'); } },
+          onCaption: (stable, tentative) => {
+            if (stable || tentative) renderCaption(stable, tentative);
+            else if (session === voiceSession && voiceState === 'listening') renderCaption('', '', 'Listening…');
+            else renderCaption('', '');
+          },
+          onTurn: text => insertDictation(text),
+          onError: error => {
+            if (session !== voiceSession) return;
+            const [text, offerTab] = micProblem(error);
+            stopVoice(); showVoiceNotice(text, offerTab);
+          },
+        });
+        if (session !== voiceSession) { handle.stop(); return; }
+        voiceHandle = handle;
+      } catch (error) {
+        if (session !== voiceSession) return;
+        const [text, offerTab] = micProblem(error);
+        stopVoice(); showVoiceNotice(text, offerTab);
+      }
+    }
+    async function startVoice() {
+      const draft = currentDraft();
+      if (!draft || currentFired || voiceState !== 'idle') return;
+      voiceNotice.hidden = true;
+      if (!window.LocalVocal || !navigator.mediaDevices?.getUserMedia) {
+        showVoiceNotice(window.isSecureContext ? 'Dictation is not available in this browser.' : 'Dictation needs a secure (https) address.', false);
+        return;
+      }
+      if (microphoneAllowedHere() === false) {
+        showVoiceNotice(framed ? 'The microphone is blocked inside this window.' : 'This page is not allowed to use the microphone.', framed);
+        return;
+      }
+      const engine = currentEngine();
+      if (engine.arch) return startStreamingVoice(draft, engine);
+      const session = ++voiceSession;
+      voiceTarget = draft;
+      setVoiceState('starting');
+      renderCaption('', '', 'Starting microphone…');
+      // The microphone first: a blocked or refused one should not cost a model download.
+      const warm = voiceWarm = LocalVocal.prewarmMic();
+      const mic = await warm;
+      if (session !== voiceSession) return;
+      if (!mic) {
+        const [text, offerTab] = micProblem(LocalVocal.lastError);
+        stopVoice(); showVoiceNotice(text, offerTab);
+        return;
+      }
+      try { localStorage.setItem(VOICE_USED_KEY, '1'); } catch (_) {}
+      LocalVocal.init({ preferCpu, onStatus: (status, detail) => {
+        if (session === voiceSession && voiceState === 'starting' && status === 'loading') renderCaption('', '', loadingLabel(detail));
+      } });
+      if (LocalVocal.status !== 'ready') renderCaption('', '', loadingLabel(LocalVocal.statusDetail));
+      voiceHandle = LocalVocal.listen({
+        onListening: () => {
+          if (session !== voiceSession) return;
+          setVoiceState('listening'); renderCaption('', '', 'Listening…');
+        },
+        onCaption: (stable, tentative) => {
+          if (stable || tentative) renderCaption(stable, tentative);
+          else if (session === voiceSession && voiceState === 'listening') renderCaption('', '', 'Listening…');
+          else renderCaption('', '');
+        },
+        onTurn: text => insertDictation(text),
+        onLevel: showLevel,
+        onError: error => {
+          if (session !== voiceSession) return;
+          const message = (error && error.message) || '';
+          if (message.startsWith('transcription') && voiceState === 'listening') return;   // one chunk lost; dictation continues
+          const [text, offerTab] = message.startsWith('transcription')
+            ? ['The voice model could not load. Check the connection and try again.', false] : micProblem(error);
+          stopVoice(); showVoiceNotice(text, offerTab);
+        },
+      });
+    }
+    function stopVoice() {
+      if (voiceState === 'idle') return;
+      voiceSession++;
+      setVoiceState('idle');
+      if (voiceHandle) { voiceHandle.stop(); voiceHandle = null; }
+      // Release the microphone now, and again if a request still in flight opens it later.
+      LocalVocal.releaseMic();
+      const warm = voiceWarm; voiceWarm = null;
+      if (warm) warm.then(() => { if (voiceState === 'idle') LocalVocal.releaseMic(); });
+      if (voiceCaption.querySelector('.voice-status')) renderCaption('', '');
+    }
+    // A tap toggles dictation; right-click or press-and-hold opens the model menu instead.
+    let holdTimer = null, heldOpen = false;
+    voiceButton.addEventListener('click', () => {
+      if (heldOpen) { heldOpen = false; return; }
+      closeVoiceMenu();
+      if (voiceState === 'idle') startVoice(); else stopVoice();
+    });
+    voiceButton.addEventListener('contextmenu', event => {
+      event.preventDefault();   // also keeps the workspace's own right-click menu away
+      clearTimeout(holdTimer);
+      if (event.pointerType === 'touch') heldOpen = true;
+      openVoiceMenu();
+    });
+    voiceButton.addEventListener('pointerdown', event => {
+      if (event.pointerType === 'mouse') return;
+      heldOpen = false;
+      clearTimeout(holdTimer);
+      holdTimer = setTimeout(() => { heldOpen = true; openVoiceMenu(); }, 550);
+    });
+    for (const type of ['pointerup', 'pointercancel', 'pointerleave']) voiceButton.addEventListener(type, () => clearTimeout(holdTimer));
+    document.getElementById('voice-notice-close').addEventListener('click', () => { voiceNotice.hidden = true; });
+    try {
+      // Someone who has dictated before gets the cached model loaded ahead of the next press.
+      if (window.LocalVocal && !currentEngine().arch && localStorage.getItem(VOICE_USED_KEY)) setTimeout(() => LocalVocal.init({ preferCpu }), 1500);
+    } catch (_) {}
+    const initial = localDraft();
+    drafts = [initial];
+    displayDraft(initial);
+    api('/api/drafts').then(data => {
+      const stored = data.drafts.map(draft => ({ ...draft, dirty: false, version: 0 }));
+      if (hasInteracted) { drafts = [...drafts, ...stored]; return; }
+      drafts = stored.length ? stored : [initial];
+      if (stored.length) displayDraft(stored[0]);
+    }).catch(showSaveError);
+    const defaultsFetch = api('/api/destination-defaults').then(data => {
+      if (defaultsChanged) return;
+      if (localDefaultsReady && (defaults.updated_at || 0) > (data.updated_at || 0)) { saveDefaults(); return; }
+      defaults = data;
+      providerInput.value = defaults.provider;
+      try { localStorage.setItem(DEFAULTS_KEY, JSON.stringify(defaults)); } catch (_) {}
+      if (activeView === 'setup') loadModels();
+    }).catch(() => {});
+    defaultsReady = localDefaultsReady ? Promise.resolve() : defaultsFetch;
+    warmModels();
+    setInterval(warmModels, 5 * 60 * 1000);
+  </script>
+  <!-- shell script -->
+</body>
+</html>

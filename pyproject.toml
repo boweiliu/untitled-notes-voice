@@ -98,6 +98,7 @@ members = ["system/libs/*", "system/services/*", "system/apps/*"]
 exclude = ["system/libs/workspace_ui", "system/apps/terminal_pty", "system/apps/files"]
 
 [tool.uv.sources]
+untitled-notes-voice = { workspace = true }
 bootstrap = { workspace = true }
 github-sync = { workspace = true }
 env-converge = { workspace = true }

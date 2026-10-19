@@ -1,52 +1,53 @@
-# Your workspace
+<p align="center">
+  <img alt="Untitled Notes Voice" src="template.svg" width="480">
+</p>
 
-This folder is your agent's home: everything it knows, everything it builds,
-and the machinery that keeps it running.
+# Untitled Notes Voice
 
-## Creations
+<p align="center">
+  <a href="https://studio.imbue.com/open?git_url=https://github.com/boweiliu/untitled-notes-voice"><img alt="Open in Imbue Studio" height="64" src="https://img.shields.io/badge/Open%20in%20Imbue%20Studio-D8D1C0?style=for-the-badge"></a>
+</p>
 
-Broadly, in Imbue Studio you make "creations". These can be "code" (apps, skills, and
-the services behind them) or "data" (documents, images, notes).
+Didn't work? Create a Studio workspace and paste this to your agent:
+` /use-template https://github.com/boweiliu/untitled-notes-voice`
 
-Imbue Studio makes this easier by defining some conventions for the common things
-you'll want to make:
+## Why you care
 
-1. an "app" - something you can open as a tab and interact with
-2. a "skill" - teaches your agent how to do work you care about. A skill that
-   is automatically run on a schedule is called an "automation" (the
-   machinery that runs them lives in `system/libs/automations/`; the weekly
-   Caretaker is the built-in example)
-3. some "data" - documents, images, notes, or data created by your apps and
-   skills
-4. some "customizations" - changes to any of the above. Everything in Imbue Studio
-   can be modified by you!
+Draft messages with on-device voice dictation, then send them to chats across your Imbue Studio machines.
 
-## What's here
+Capture a thought while it is fresh, then shape it before sending. Keep several drafts and dictate into the one you are editing without choosing a chat first.
 
-- `apps/` - Everything you can open as a tab: the built-in apps (chat, the
-  terminal, the file viewer, the browser) and the apps your agent builds for you. (A shortcut
-  to `system/apps/`.)
-- `skills/` - Everything your agent knows how to do: the built-in skills and
-  the ones it has learned for you. (A shortcut to `.agents/skills/`.)
-- `data/` - Your workspace's data: documents and project folders, files
-  you've uploaded, your agent's memories, and each app's stored data.
-- `docs/` - Guides to this workspace: what it is, how it works, and a history
-  of where it came from.
-- `system/` - The machinery that runs the workspace: the apps themselves,
-  background services, scripts, and configuration. You can look around (every
-  folder has a README), and your agent maintains it for you.
+## How to use it
 
-A few housekeeping files live alongside them:
+1. Open **Untitled Notes Voice** in Studio. Type a draft and optional title; edits save automatically. Use the draft list to switch or create another.
+2. For dictation, visit the app's HTTPS address in a standalone browser tab and allow the microphone. Current Studio frames block it. Click the mic to begin/stop; right-click or long-press for Moonshine Base (default), v2 Tiny, Small or Medium. v2 needs an isolated top-level tab; Small can fall behind on modest CPUs. First use downloads the model; no speech API key is required.
+3. Choose Continue, select a machine and a new or existing chat, choose provider/model/effort, review, then send. Local sends use the AI account you already connected to Studio. Linked machines need optional workspace read and SSH permission.
+4. Check the outbox and destination. Uncertain sends retain your words and never automatically resend. A new chat may be created before the prompt is visible in history, so inspect it before retrying.
 
-- `README.md` - This file.
-- `CLAUDE.md` - The standing instructions your agent follows.
-- `pyproject.toml` and `uv.lock` - The Python project definition; the tooling
-  requires them at the top level.
+Audio stays in your browser. Typed and recognized text is autosaved on your workspace server and sent to your chosen chat when you send it. This template includes no personal drafts or recordings.
 
-## Where things are kept safe
+The full workspace installs the native package and registers port 8096. For installation and test commands see the [app guide](system/apps/untitled_notes_voice/README.md); activation details are in [the manifest](template.md).
 
-The workspace is a git repository: code and configuration changes are
-committed as your agent works. Everything under `data/` is deliberately kept
-out of git (it can be large, personal, or both) and is protected by the
-workspace's continuous encrypted backup instead, along with the rest of the
-workspace. See `docs/` for details.
+## Ideas for making it yours
+
+- Add reusable draft starters for bug reports, meeting follow-ups or research questions.
+- Add a word-count target or a compact editing checklist before sending.
+- Add a destination shortcut for the chat you use most often.
+- Offer a plain-text export of selected drafts.
+
+## What this is
+
+This repository is a published **Imbue Studio template**: a clean, bootable
+snapshot of what an agent built, ready to adapt into your own. It is NOT the
+generic workspace template -- it is this specific project.
+
+[`template.md`](template.md) is the full manifest -- what it is, how it
+works, what it needs to run, and what to adapt -- with the
+machine-readable half (recipe, requirements, and the environment it needs
+installed) in [`template.toml`](template.toml).
+
+## Credits and provenance
+
+Browser voice modules build on [Local Vocal](https://github.com/DanverImbue/local-vocal), Moonshine, Silero VAD, ONNX Runtime Web and Transformers.js. Original module attribution is retained. Published under the [MIT license](LICENSE).
+
+First publication packages external voice source `16a40263d4f303b804e4d866a0600e26c4eddf21` from `boweiliu/prompt-notes` alongside source workspace `8fc760b88fdcba8bd41ccecda5219315689ace90`. The private source is provenance, not an installation dependency. Future updates explicitly stage that external source before applying the [publication recipe](template.toml).
