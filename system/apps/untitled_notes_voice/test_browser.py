@@ -147,3 +147,36 @@ def test_follow_up_picks_a_machine_then_one_of_its_chats(tmp_path, monkeypatch):
     finally:
         server.shutdown()
         thread.join(timeout=5)
+
+
+@pytest.mark.browser
+def test_tab_from_title_goes_to_the_note_text(tmp_path, monkeypatch):
+    monkeypatch.setattr(runner, "DATA_DIR", tmp_path)
+    server = make_server("127.0.0.1", 0, runner.app, threaded=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(executable_path="/opt/fortress/tilion-fortress/tilion", args=["--no-sandbox"])
+            page = browser.new_page(viewport={"width": 1100, "height": 800})
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.route("**/api/chat-models/*", lambda route: route.fulfill(json={"provider": "claude", "available": True, "models": []}))
+            page.route("**/api/machines", lambda route: route.fulfill(json={"machines": [], "current_machine_id": "", "unavailable": True}))
+            page.goto(f"http://127.0.0.1:{server.server_port}/")
+            title = page.get_by_label("Draft title", exact=True)
+            title.click()
+            page.keyboard.type("Groceries")
+            page.keyboard.press("Tab")
+            assert page.evaluate("document.activeElement.id") == "draft-text"
+            page.keyboard.type("eggs")
+            expect(page.get_by_label("Draft text", exact=True)).to_have_value("eggs")
+            expect(title).to_have_value("Groceries")
+            # Shift+Tab still moves backward the usual way.
+            page.keyboard.press("Shift+Tab")
+            assert page.evaluate("document.activeElement.id") != "draft-text"
+            assert errors == []
+            browser.close()
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)

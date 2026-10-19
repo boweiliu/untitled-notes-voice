@@ -2,7 +2,7 @@
 title: "Untitled Notes Voice"
 description: "Draft messages with on-device voice dictation, then send them to chats across your Imbue Studio machines."
 thumbnail: "template.svg"
-version: v2
+version: v3
 format: v2
 ---
 
@@ -35,7 +35,7 @@ The app directory contains the Flask server, browser voice modules, icon, manife
 
 Typed and recognized text autosaves to SQLite under `data/.apps/untitled-notes-voice`. Audio processing stays in the browser. Base uses Silero VAD, Transformers.js and Moonshine; v2 uses Moonshine's streaming WASM package. Browser modules load from public CDNs/model hosts and the workspace's built shell assets. Sending uses the local Studio chat service on port 8010; linked destinations use the workspace gateway and SSH. The app itself makes no direct LLM call.
 
-The original app is external to the source monorepo. To update, stage a clean archive of the chosen external voice source into `system/apps/untitled_notes_voice`, reapply the rules in `template.toml`, then run the documented full-tree assembly. Do not expect the monorepo SHA alone to contain the app. This version maps source workspace `8fc760b88fdcba8bd41ccecda5219315689ace90` plus external `boweiliu/prompt-notes` voice commit `16a40263d4f303b804e4d866a0600e26c4eddf21` onto clean base `15f79b99adf24c58c2c2177ecb3ad173798ccd2d`. The private source is provenance only; adopters need no access to it.
+The original app is external to the source monorepo. To update, stage a clean archive of the chosen external voice source into `system/apps/untitled_notes_voice`, reapply the rules in `template.toml`, then run the documented full-tree assembly. Do not expect the monorepo SHA alone to contain the app. This version maps source workspace `9a06700e1aaf4cfa8d0b5147ab152d3beb3576b7` plus external `boweiliu/prompt-notes` voice commit `2ae501e8f88a5c2d52d13a5d6d850aaaa8717245` onto clean base `15f79b99adf24c58c2c2177ecb3ad173798ccd2d`. The private source is provenance only; adopters need no access to it.
 
 ## Recipe
 
@@ -123,6 +123,10 @@ First public packaging of external voice source `16a40263d4f303b804e4d866a0600e2
 ### v2 (2026-10-19) -- Native workspace compatibility checks
 
 Add the standard native-package checks and typing compatibility, keep the existing draft-persistence browser check with an explicit bounded timeout, and register the real-model test marker. Executable server behavior, browser voice modules, source anchors, requirements and private exclusions are unchanged.
+
+### v3 (2026-10-19) -- Tab from the title goes to the note text
+
+Refresh the app from external voice source `2ae501e8f88a5c2d52d13a5d6d850aaaa8717245`: pressing Tab in the draft title now moves the cursor into the note text instead of the header buttons; Shift+Tab is unchanged. Adds a browser check for it. Server behavior, voice modules, requirements and private exclusions are unchanged.
 
 ## Adaptation history
 

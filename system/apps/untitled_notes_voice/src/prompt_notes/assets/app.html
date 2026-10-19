@@ -573,6 +573,12 @@
       else loadModels();
     }
     titleInput.addEventListener('input', () => changed('title'));
+    // Tab from the title goes straight to the note text, not the header buttons beside it.
+    titleInput.addEventListener('keydown', event => {
+      if (event.key !== 'Tab' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;
+      event.preventDefault();
+      bodyInput.focus();
+    });
     bodyInput.addEventListener('input', () => changed('body'));
     chatNameInput.addEventListener('input', () => { chatNameEdited = true; });
     machineInput.addEventListener('change', () => {
