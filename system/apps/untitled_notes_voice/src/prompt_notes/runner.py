@@ -42,7 +42,7 @@ import urllib.request
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Generator
 
 from flask import Flask, Response, abort, jsonify, request, send_file
 from werkzeug.serving import run_simple
@@ -105,7 +105,7 @@ REMOTE_CONNECTION_LOCK = threading.Lock()
 
 
 @contextmanager
-def database() -> Iterator[sqlite3.Connection]:
+def database() -> Generator[sqlite3.Connection, None, None]:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(DATA_DIR / "drafts.sqlite3", timeout=10)
     connection.row_factory = sqlite3.Row
@@ -187,7 +187,7 @@ def list_drafts() -> Response:
 
 
 @app.post("/api/drafts")
-def create_draft() -> Response:
+def create_draft() -> Response | tuple[Response, int]:
     body, title = fields_from_request()
     draft_id = str(uuid.uuid4())
     now = time.time()
@@ -225,7 +225,7 @@ def delete_draft(draft_id: str) -> Response:
     return jsonify({"deleted": draft_id})
 
 
-def action_view(row: sqlite3.Row) -> dict[str, object]:
+def action_view(row: sqlite3.Row) -> dict[str, Any]:
     return {
         "id": row["id"], "title": row["title"], "body": row["body"],
         "destination": json.loads(row["destination"]), "state": row["state"],
@@ -410,7 +410,7 @@ def check_uncertain_actions() -> None:
 
 
 @app.post("/api/fire")
-def fire_draft() -> Response:
+def fire_draft() -> Response | tuple[Response, int]:
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict) or not isinstance(payload.get("draft_id"), str) or not isinstance(payload.get("destination"), dict):
         abort(400, "Choose a draft and destination")
@@ -469,7 +469,7 @@ def chat_json(path: str) -> object:
         abort(503, "Chat choices are temporarily unavailable")
 
 
-def studio_workspaces() -> dict[str, object] | None:
+def studio_workspaces() -> dict[str, Any] | None:
     gateway = os.environ.get("LATCHKEY_GATEWAY", "")
     password = os.environ.get("LATCHKEY_GATEWAY_PASSWORD", "")
     if not gateway or not password:

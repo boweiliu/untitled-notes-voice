@@ -26,5 +26,9 @@ test = ["pytest>=8", "playwright>=1.50"]
 [tool.pytest.ini_options]
 markers = [
     "browser: exercises the app in a real browser",
+    "timeout: per-test runtime budget",
     "voice_model: downloads and runs the real speech model (about 2 GB of browser memory)",
 ]
+
+# Keep type checks scoped to this native package.
+[tool.ty]

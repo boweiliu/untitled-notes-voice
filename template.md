@@ -2,7 +2,7 @@
 title: "Untitled Notes Voice"
 description: "Draft messages with on-device voice dictation, then send them to chats across your Imbue Studio machines."
 thumbnail: "template.svg"
-version: v1
+version: v2
 format: v2
 ---
 
@@ -119,6 +119,10 @@ This is distinct from "Adaptation history" below, which is the ADOPTERS' log.
 ### v1 (2026-10-19) -- Browser dictation, autosaved drafts and Studio chat destinations
 
 First public packaging of external voice source `16a40263d4f303b804e4d866a0600e26c4eddf21` (`boweiliu/prompt-notes`, voice), staged with source workspace `8fc760b88fdcba8bd41ccecda5219315689ace90`. Includes native installation and existing tests, with private deployment automation and runtime data excluded. Two comment-only baseline credential references are removed to avoid a known assembler false positive; runtime settings are unchanged. Local Vocal attribution and Moonshine dependency notices are retained. No real drafts, recordings, accounts or source history are included.
+
+### v2 (2026-10-19) -- Native workspace compatibility checks
+
+Add the standard native-package checks and typing compatibility, keep the existing draft-persistence browser check with an explicit bounded timeout, and register the real-model test marker. Executable server behavior, browser voice modules, source anchors, requirements and private exclusions are unchanged.
 
 ## Adaptation history
 

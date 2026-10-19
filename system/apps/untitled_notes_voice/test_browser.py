@@ -45,6 +45,7 @@ def test_mobile_drafts_and_warm_model_choices(tmp_path, monkeypatch):
             assert set(calls) == {"claude", "codex", "agy", "pi-dev"}
             for button in page.locator("button:visible").all():
                 box = button.bounding_box()
+                assert box is not None
                 assert box["width"] >= 44 and box["height"] >= 44
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             page.get_by_label("Draft title", exact=True).fill("Stale draft")

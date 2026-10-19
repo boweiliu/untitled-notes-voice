@@ -8,6 +8,7 @@ import pytest
 
 
 @pytest.mark.browser
+@pytest.mark.timeout(60)
 def test_native_draft_reload_and_model_choice(tmp_path, monkeypatch):
     root=tmp_path
     monkeypatch.setattr(runner, "DATA_DIR", root/"drafts")

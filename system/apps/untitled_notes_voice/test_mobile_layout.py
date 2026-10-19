@@ -29,7 +29,7 @@ def test_bottom_controls_stay_on_screen(tmp_path, monkeypatch, height):
             page = browser.new_page(viewport={"width": 360, "height": height}, is_mobile=True, has_touch=True)
             page.route("**/api/chat-models/*", lambda route: route.fulfill(json={"provider": "claude", "available": True, "models": []}))
             page.goto(f"http://127.0.0.1:{server.port}/")
-            assert "interactive-widget=resizes-content" in page.locator('meta[name="viewport"]').get_attribute("content")
+            assert "interactive-widget=resizes-content" in (page.locator('meta[name="viewport"]').get_attribute("content") or "")
             page.locator("#draft-text").fill(LONG_TEXT)
             for scroll in (0, 99999):
                 page.evaluate(f"window.scrollTo(0, {scroll})")
