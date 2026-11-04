@@ -2,7 +2,7 @@
 title: "Untitled Notes Voice"
 description: "Draft messages with on-device voice dictation, then send them to chats across your Imbue Studio machines."
 thumbnail: "template.svg"
-version: v4
+version: v5
 format: v2
 ---
 
@@ -131,6 +131,8 @@ Refresh the app from external voice source `2ae501e8f88a5c2d52d13a5d6d850aaaa871
 ### v4 (2026-10-19) -- Destination choices load instantly
 
 Refresh the app from external voice source `c532cbf134db2802f3b1acb55d7134d5b4cd39c4`: the server remembers the last machine list, model lists and chat lists (in memory and in `choice_cache.json` under the app's data folder) and answers from that copy at once, refreshing it in the background when it is over 30 seconds old; the refresh buttons ask again. A new browser no longer waits for a linked machine before the model menu fills in. Adds checks for it. Requirements and private exclusions are unchanged.
+
+### v5 (2026-11-04) -- More provider and subscription choices, per-machine preferences, sent-note controls, cached selectors and home-screen icons.
 
 ## Adaptation history
 

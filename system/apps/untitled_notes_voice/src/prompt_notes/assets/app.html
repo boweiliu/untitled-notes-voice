@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <title>Untitled</title>
+  <!-- pwa head -->
   <style>
     :root { font-family: ui-sans-serif, system-ui, sans-serif; color: #343a33; background: #faf9f5; }
     * { box-sizing: border-box; }
@@ -11,6 +12,13 @@
     button, input, select, textarea { font: inherit; }
     button { cursor: pointer; }
     button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 1px solid #778b78; outline-offset: 3px; }
+    .update-notice { position: sticky; top: 0; z-index: 40; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 12px; padding: calc(6px + env(safe-area-inset-top)) 16px 6px; border-bottom: 1px solid #b7c4b6; background: #edf1e8; color: #344b37; font-size: 13px; }
+    .mirror-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 12px; padding: calc(6px + env(safe-area-inset-top)) 16px 6px; border-bottom: 1px solid #e5e8e0; background: #f3f2ec; color: #5d6a5c; font-size: 13px; text-align: center; }
+    .mirror-notice a { min-height: 44px; display: inline-flex; align-items: center; color: #435f47; font-weight: 650; }
+    /* A view-only copy (the notes live on another machine) offers nothing that writes or sends. */
+    body.mirror .new-draft-button, body.mirror .trash-button, body.mirror #continue-button, body.mirror #voice-button,
+    body.mirror #resend-button, body.mirror #remove-fired-button, body.mirror #save-indicator { display: none !important; }
+    .update-notice button { min-height: 44px; border: 1px solid #b7c4b6; border-radius: 4px; padding: 8px 12px; color: #344b37; background: #faf9f5; }
     .app { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; padding: 27px clamp(24px, 5vw, 42px) 0; }
     .view { flex: 1; display: flex; flex-direction: column; min-height: 0; }
     .view[hidden], [hidden] { display: none !important; }
@@ -46,9 +54,30 @@
     .fired-status.sending, .fired-status.checking { color: #b49a5d; }
     .fired-status.attention { color: #bd756d; }
     .fired-status.attention svg { fill: currentColor; stroke: none; }
-    .fired-row { position: relative; }
-    .fired-row .machine-tip { position: absolute; right: 27px; top: 39px; z-index: 2; border: 1px solid #e4e8df; padding: 7px 9px; background: #faf9f5; box-shadow: 0 5px 16px #35433312; color: #7b8b7b; font-size: 11px; white-space: nowrap; opacity: 0; pointer-events: none; }
-    .fired-row:hover .machine-tip, .fired-row:focus-visible .machine-tip { opacity: 1; }
+    .fired-row { align-items: center; }
+    .fired-text { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; }
+    /* A phone has no hover, so what the status icon means is spelled out under the note's name. */
+    .fired-caption { display: none; color: #98a595; font-size: 12px; line-height: 1.4; }
+    .fired-caption .state { font-weight: 600; }
+    .fired-caption.sending .state, .fired-caption.checking .state { color: #9a8240; }
+    .fired-caption.attention .state { color: #a9625a; }
+    @media (hover: none), (pointer: coarse) { .fired-caption { display: block; } }
+    /* Hints: a short label and one line of explanation for every icon (hover, keyboard focus, or press and hold). */
+    .tip { position: fixed; z-index: 30; max-width: min(300px, calc(100vw - 16px)); border: 1px solid #e4e8df; padding: 8px 11px; background: #faf9f5; box-shadow: 0 5px 16px #35433318; color: #8b9989; font-size: 12px; line-height: 1.45; pointer-events: none; }
+    .tip b { display: block; color: #344b37; font-weight: 600; }
+    [data-tip] { -webkit-touch-callout: none; }
+    .fired-row, .icon-button, .fired-status { -webkit-user-select: none; user-select: none; }
+    .save-indicator:not(.visible) { pointer-events: none; }
+    .fired-info { display: flex; flex-direction: column; gap: 6px; margin: 22px 0 0; color: #8b9989; font-size: 12px; line-height: 1.5; }
+    .fired-info p { margin: 0; }
+    .fired-info .state b { color: #6f7f6f; font-weight: 600; }
+    .fired-info .problem { color: #9a5a54; }
+    .fired-info .id-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+    .fired-info .id-chip { min-height: 32px; border: 1px solid #e4e8df; padding: 4px 8px; background: transparent; color: #5b6b5b; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; text-align: left; overflow-wrap: anywhere; -webkit-user-select: text; user-select: text; }
+    .fired-info .id-chip:hover { border-color: #b7c4b6; color: #344b37; }
+    .fired-info .copied { color: #627b65; }
+    @media (pointer: coarse) { .fired-info .id-chip { min-height: 44px; } }
+    .fired-info:not([hidden]) + #draft-text { margin-top: 18px; }
     .readonly-indicator { display: inline-grid; place-items: center; width: 32px; height: 32px; }
     .readonly-indicator[hidden] { display: none; }
     .empty-list { margin: 0; color: #a5afa1; font-family: Georgia, 'Iowan Old Style', serif; font-style: italic; }
@@ -119,16 +148,22 @@
   </style>
 </head>
 <body>
+  <!-- mirror notice -->
+  <aside id="update-notice" class="update-notice" aria-label="App update" hidden>
+    <span id="update-message" role="status">An update is ready.</span>
+    <button id="refresh-app" type="button">Click here to refresh</button>
+  </aside>
   <main class="app">
     <section class="view" id="editor-view" aria-label="Draft editor">
       <header class="header">
         <input class="title" id="draft-title" aria-label="Draft title" placeholder="Untitled" maxlength="120" autocomplete="off" spellcheck="true">
         <div class="header-actions">
-          <button class="icon-button new-draft-button" type="button" aria-label="New draft" title="New draft"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5v15M4.5 12h15"/></svg></button>
-          <button class="icon-button" id="drafts-button" type="button" aria-label="Drafts" title="Drafts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5.5h11.5v13H7zM5 8H3.5v12.5H16"/></svg></button>
-          <button class="icon-button" id="fired-button" type="button" aria-label="Fired" title="Fired"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="6" width="17" height="12" rx="1.5"/><path d="m4.5 7 7.5 6 7.5-6"/></svg></button>
+          <button class="icon-button new-draft-button" type="button" aria-label="New draft" data-tip="New draft" data-tip-more="Start a blank note."><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5v15M4.5 12h15"/></svg></button>
+          <button class="icon-button" id="drafts-button" type="button" aria-label="Drafts" data-tip="Drafts" data-tip-more="Notes you are still writing."><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5.5h11.5v13H7zM5 8H3.5v12.5H16"/></svg></button>
+          <button class="icon-button" id="fired-button" type="button" aria-label="Fired" data-tip="Fired" data-tip-more="Notes you have sent, and whether each one arrived."><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="6" width="17" height="12" rx="1.5"/><path d="m4.5 7 7.5 6 7.5-6"/></svg></button>
         </div>
       </header>
+      <div class="fired-info" id="fired-info" hidden></div>
       <textarea id="draft-text" aria-label="Draft text" spellcheck="true"></textarea>
       <div class="editor-bottom">
       <div class="voice-menu" id="voice-menu" role="menu" aria-label="Speech model" hidden></div>
@@ -138,44 +173,52 @@
         <span class="save-indicator" id="save-indicator" aria-live="polite" aria-label=""><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.6 2.8L16 9"/></svg></span>
         <span class="fired-status readonly-indicator" id="readonly-status" role="img" hidden></span>
         <div class="footer-actions">
-          <button class="icon-button voice-button" id="voice-button" type="button" aria-label="Start dictation" aria-pressed="false" aria-haspopup="menu" title="Dictate (right-click or hold for models)"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/></svg></button>
-          <button class="icon-button" id="continue-button" type="button" aria-label="Continue" title="Continue"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12h14M13 6.5l5.5 5.5-5.5 5.5"/></svg></button>
-          <button class="icon-button" id="copy-button" type="button" aria-label="Copy text" title="Copy text" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="12" rx="1.5"/><path d="M15.5 8V5.5A1.5 1.5 0 0 0 14 4H6a1.5 1.5 0 0 0-1.5 1.5V15A1.5 1.5 0 0 0 6 16.5h2"/></svg></button>
+          <button class="icon-button voice-button" id="voice-button" type="button" aria-label="Start dictation" aria-pressed="false" aria-haspopup="menu" data-tip="Dictate" data-tip-more="Tap to start talking. Right-click or hold to pick a speech model." data-tip-hold="own"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/></svg></button>
+          <button class="icon-button" id="continue-button" type="button" aria-label="Continue" data-tip="Continue" data-tip-more="Choose where to send this note."><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12h14M13 6.5l5.5 5.5-5.5 5.5"/></svg></button>
+          <button class="icon-button" id="resend-button" type="button" aria-label="Resend" data-tip="Resend" data-tip-more="Send again as a new message. The original stays until this attempt is confirmed." hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2 6M20 4v7h-7"/></svg></button>
+          <button class="icon-button trash-button" id="remove-fired-button" type="button" aria-label="Remove from Fired" data-tip="Remove from Fired" data-tip-more="Take this off the list. Copy its text first if you still need it." hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7"/></svg></button>
+          <button class="icon-button" id="copy-button" type="button" aria-label="Copy text" data-tip="Copy text" data-tip-more="Copy this sent note to the clipboard." hidden><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="12" rx="1.5"/><path d="M15.5 8V5.5A1.5 1.5 0 0 0 14 4H6a1.5 1.5 0 0 0-1.5 1.5V15A1.5 1.5 0 0 0 6 16.5h2"/></svg></button>
         </div>
       </footer>
       </div>
     </section>
     <section class="view" id="drafts-view" aria-label="Drafts" hidden>
-      <header class="header"><button class="icon-button back-button" type="button" aria-label="Back to editor" title="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12h-14M11 6.5 5.5 12l5.5 5.5"/></svg></button></header>
-      <nav class="list-switcher" aria-label="Notes"><button class="icon-button active" id="list-drafts" type="button" aria-label="Drafts" title="Drafts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5.5h11.5v13H7zM5 8H3.5v12.5H16"/></svg></button><button class="icon-button" id="list-fired" type="button" aria-label="Fired" title="Fired"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="6" width="17" height="12" rx="1.5"/><path d="m4.5 7 7.5 6 7.5-6"/></svg></button></nav>
+      <header class="header"><button class="icon-button back-button" type="button" aria-label="Back to editor" data-tip="Back" data-tip-more="Return to your note. Shortcut: Esc."><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12h-14M11 6.5 5.5 12l5.5 5.5"/></svg></button></header>
+      <nav class="list-switcher" aria-label="Notes"><button class="icon-button active" id="list-drafts" type="button" aria-label="Drafts" data-tip="Drafts" data-tip-more="Notes you are still writing."><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5.5h11.5v13H7zM5 8H3.5v12.5H16"/></svg></button><button class="icon-button" id="list-fired" type="button" aria-label="Fired" data-tip="Fired" data-tip-more="Notes you have sent, and whether each one arrived."><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="6" width="17" height="12" rx="1.5"/><path d="m4.5 7 7.5 6 7.5-6"/></svg></button></nav>
       <div class="draft-list" id="draft-list"></div>
       <p id="list-error" class="list-error" role="alert" hidden></p>
-      <div class="list-footer"><button class="icon-button new-draft-button" type="button" aria-label="New draft" title="New draft"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5v15M4.5 12h15"/></svg></button></div>
+      <div class="list-footer"><button class="icon-button new-draft-button" type="button" aria-label="New draft" data-tip="New draft" data-tip-more="Start a blank note."><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5v15M4.5 12h15"/></svg></button></div>
     </section>
     <section class="view" id="setup-view" aria-label="Choose destination" hidden>
-      <header class="header"><button class="icon-button back-button" type="button" aria-label="Back to editor" title="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12h-14M11 6.5 5.5 12l5.5 5.5"/></svg></button></header>
+      <header class="header"><button class="icon-button back-button" type="button" aria-label="Back to editor" data-tip="Back" data-tip-more="Return to your note. Shortcut: Esc."><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12h-14M11 6.5 5.5 12l5.5 5.5"/></svg></button></header>
       <h1 class="section-heading">Destination</h1>
       <div class="choice-list">
         <button class="choice active" id="new-chat" type="button" aria-pressed="true"><span class="choice-circle" aria-hidden="true"></span>New chat</button>
         <button class="choice" id="follow-up" type="button" aria-pressed="false"><span class="choice-circle" aria-hidden="true"></span>Follow-up</button>
       </div>
       <div class="fields" id="machine-fields">
-        <div class="field"><label for="machine">Machine</label><select id="machine"><option value="">Loading machines…</option></select><button class="icon-button" id="refresh-machines" type="button" aria-label="Refresh linked machines" title="Refresh linked machines"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.7-4.3M4 4v4.5h4.5M4 13a8 8 0 0 0 14.7 4.3M20 20v-4.5h-4.5"/></svg></button></div>
+        <div class="field"><label for="machine">Machine</label><select id="machine"><option value="">Loading machines…</option></select><button class="icon-button" id="refresh-machines" type="button" aria-label="Refresh linked machines" data-tip="Refresh linked machines" data-tip-more="Reload the machines and chats you can send to."><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.7-4.3M4 4v4.5h4.5M4 13a8 8 0 0 0 14.7 4.3M20 20v-4.5h-4.5"/></svg></button></div>
       </div>
       <div class="fields" id="new-chat-fields">
         <div class="field"><label for="chat-name">Chat name</label><input id="chat-name" type="text" placeholder="&lt;default&gt;" autocomplete="off"></div>
         <div class="field"><label for="provider">Provider</label><select id="provider"><option value="claude">Claude</option><option value="codex">Codex</option><option value="agy">Agy</option><option value="pi-dev">Pi-dev</option></select></div>
+        <div class="field" id="subscription-field" hidden><label for="subscription">Subscription</label><select id="subscription"><option value="">Loading subscriptions…</option></select></div>
         <div class="field"><label for="model">Model</label><select id="model"><option value="">Loading models…</option></select></div>
         <div class="field"><label for="effort">Effort</label><select id="effort"><option value="">Choose model first</option></select></div>
       </div>
       <div class="fields" id="followup-fields" hidden><div class="field"><label for="target-chat">Chat</label><select id="target-chat"><option value="">Loading chats…</option></select></div></div>
-      <footer class="setup-footer"><span class="setup-note" id="setup-note"></span><button class="action" id="preview-button" type="button">Send</button></footer>
+      <footer class="setup-footer"><span class="setup-note" id="setup-note"></span><button class="action" id="preview-button" type="button" data-tip="Send" data-tip-more="Send this note to the place chosen above.">Send</button></footer>
     </section>
   </main>
-  <script src="/voice/voice_session.js"></script>
-  <script src="/voice/voice_capture.js"></script>
-  <script src="/voice/voice_streaming.js"></script>
+  <div class="tip" id="tip" role="tooltip" hidden></div>
+  <script src="/voice/voice_session.js?v=__FRONTEND_VERSION__"></script>
+  <script src="/voice/voice_capture.js?v=__FRONTEND_VERSION__"></script>
+  <script src="/voice/voice_streaming.js?v=__FRONTEND_VERSION__"></script>
+  <!-- selector bootstrap -->
   <script>
+    // The server adds the notice only on a view-only copy of another machine's notes.
+    const MIRROR = Boolean(document.getElementById('mirror-notice'));
+    if (MIRROR) document.body.classList.add('mirror');
     const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     const views = {
       editor: document.getElementById('editor-view'),
@@ -202,24 +245,60 @@
     const machineInput = document.getElementById('machine');
     const refreshMachinesButton = document.getElementById('refresh-machines');
     const modelInput = document.getElementById('model');
+    const subscriptionField = document.getElementById('subscription-field');
+    const subscriptionInput = document.getElementById('subscription');
+    // pi-dev's subscriptions (one per pi account on the machine) from the last model answer; empty for other providers.
+    let subscriptions = [];
     const effortInput = document.getElementById('effort');
     const chatNameInput = document.getElementById('chat-name');
     const targetChatInput = document.getElementById('target-chat');
-    let defaults = { provider: 'claude', by_provider: {} };
-    const DEFAULTS_KEY = 'prompt-notes.defaults.v1';
+    const serverChoices = JSON.parse(document.getElementById("selector-bootstrap")?.textContent || "{}");
+    function normalizeDefaults(value) {
+      const result = structuredClone(value);
+      if (!result.by_machine) {
+        const machine = result.machine || serverChoices.machines?.current_machine_id || '';
+        result.by_machine = {};
+        if (machine) {
+          result.machine = machine;
+          result.by_machine[machine] = { provider: result.provider || 'claude', by_provider: result.by_provider || {} };
+        }
+      }
+      for (const machine of Object.values(result.by_machine)) {
+        for (const provider of Object.values(machine.by_provider || {})) {
+          if (!provider.by_subscription) {
+            const remembered = { ...(provider.model_by_subscription || {}) };
+            if (provider.subscription && provider.model && !remembered[provider.subscription]) remembered[provider.subscription] = provider.model;
+            provider.by_subscription = {};
+            for (const [subscription, model] of Object.entries(remembered)) {
+              provider.by_subscription[subscription] = { model, effort_by_model: { ...(provider.effort_by_model || {}) } };
+            }
+          }
+        }
+      }
+      result.version = 2;
+      return result;
+    }
+    let defaults = normalizeDefaults({ provider: 'claude', by_provider: {} });
+    const DEFAULTS_KEY = 'prompt-notes.defaults.v2';
     let defaultsChanged = false;
     let localDefaultsReady = false;
     try {
-      const cached = JSON.parse(localStorage.getItem(DEFAULTS_KEY) || 'null');
+      const cached = JSON.parse(localStorage.getItem(DEFAULTS_KEY) ||
+        (!serverChoices.defaults && localStorage.getItem('prompt-notes.defaults.v1')) || 'null');
       if (cached && [...providerInput.options].some(option => option.value === cached.provider) && cached.by_provider) {
-        defaults = cached; providerInput.value = defaults.provider; localDefaultsReady = true;
+        defaults = normalizeDefaults(cached); providerInput.value = defaults.provider; localDefaultsReady = true;
       }
     } catch (_) {}
+    if (serverChoices.defaults) {
+      defaults = normalizeDefaults(serverChoices.defaults);
+      providerInput.value = defaults.provider;
+      localDefaultsReady = true;
+    }
     let defaultsReady = Promise.resolve();
     let defaultsWrite = Promise.resolve();
     let models = [];
     let modelRequest = 0;
-    const MODEL_CACHE_KEY = 'prompt-notes.models.v2';
+    const MODEL_CACHE_KEY = 'prompt-notes.models.v3';
     const MODEL_CACHE_MAX_AGE = 24 * 60 * 60 * 1000;
     const modelCache = new Map();
     const modelFetches = new Map();
@@ -231,6 +310,10 @@
         }
       }
     } catch (_) { /* Storage can be disabled or hold an older format. */ }
+    // Server choices survive a new browser, expired storage, and machine switches.
+    for (const [key, entry] of Object.entries(serverChoices.catalogs || {})) {
+      if (validModels(entry.data)) modelCache.set(key, entry);
+    }
     function validModels(data) {
       return data && Array.isArray(data.models) && data.models.every(model =>
         typeof model.id === 'string' && typeof model.label === 'string' && Array.isArray(model.efforts));
@@ -250,6 +333,7 @@
       return pending;
     }
     function warmModels() {
+      if (MIRROR) return;
       for (const option of providerInput.options) {
         const provider = option.value;
         const machine = modelMachine();
@@ -261,7 +345,90 @@
     let chatNameEdited = false;
     let machinesLoaded = false;
 
+    // ---- Hints: any element with data-tip (and optionally data-tip-more) explains itself ----
+    // A mouse hovers (after a short pause), the keyboard focuses, and a finger presses and holds.
+    // The microphone keeps its own press-and-hold menu, so it opts out with data-tip-hold="own".
+    const tipBox = document.getElementById('tip');
+    let tipTarget = null, tipPending = null, tipTimer = null, pressTimer = null, suppressClick = false;
+    let pointerSpot = null;
+    function tipOf(node) { return node instanceof Element ? node.closest('[data-tip]') : null; }
+    function showTip(target, spot) {
+      clearTimeout(tipTimer);
+      tipTarget = target; tipPending = null;
+      tipBox.replaceChildren();
+      const label = document.createElement('b'); label.textContent = target.dataset.tip; tipBox.append(label);
+      if (target.dataset.tipMore) tipBox.append(document.createTextNode(target.dataset.tipMore));
+      tipBox.hidden = false;
+      const box = target.getBoundingClientRect();
+      const width = tipBox.offsetWidth, height = tipBox.offsetHeight, margin = 8;
+      // A wide target (a list row) is explained next to the pointer; an icon is explained next to itself.
+      const wide = box.width > 160 && spot;
+      const centerX = wide ? spot.x : box.left + box.width / 2;
+      const upper = (wide ? spot.y : box.top + box.height / 2) < window.innerHeight / 2;
+      const edge = wide ? spot.y : (upper ? box.bottom : box.top);
+      const gap = wide ? 16 : 6;
+      const top = Math.min(Math.max(margin, upper ? edge + gap : edge - height - gap), window.innerHeight - height - margin);
+      const left = Math.min(Math.max(margin, centerX - width / 2), window.innerWidth - width - margin);
+      tipBox.style.top = `${top}px`; tipBox.style.left = `${left}px`;
+    }
+    function hideTip() { clearTimeout(tipTimer); tipTarget = tipPending = null; tipBox.hidden = true; }
+    document.addEventListener('pointerover', event => {
+      if (event.pointerType !== 'mouse') return;
+      const target = tipOf(event.target);
+      if (target === (tipTarget || tipPending)) return;
+      hideTip();
+      pointerSpot = { x: event.clientX, y: event.clientY };
+      if (target) { tipPending = target; tipTimer = setTimeout(() => showTip(target, pointerSpot), 200); }
+    });
+    document.addEventListener('pointermove', event => { if (event.pointerType === 'mouse') pointerSpot = { x: event.clientX, y: event.clientY }; });
+    document.addEventListener('pointerdown', event => {
+      hideTip();
+      clearTimeout(pressTimer);
+      suppressClick = false;
+      if (event.pointerType === 'mouse') return;
+      const target = tipOf(event.target);
+      if (!target || target.dataset.tipHold === 'own') return;
+      const spot = { x: event.clientX, y: event.clientY };
+      pressTimer = setTimeout(() => {
+        suppressClick = true;   // the tap that ends this hold must not also press the button
+        showTip(target, spot);
+        tipTimer = setTimeout(hideTip, 4000);
+      }, 450);
+    });
+    for (const type of ['pointerup', 'pointercancel']) document.addEventListener(type, () => {
+      clearTimeout(pressTimer);
+      // The click that ends a hold comes at once; if none does, stop waiting for it.
+      if (suppressClick) setTimeout(() => { suppressClick = false; }, 400);
+    });
+    document.addEventListener('click', event => {
+      if (!suppressClick) return;
+      suppressClick = false;
+      event.preventDefault(); event.stopPropagation();
+    }, true);
+    document.addEventListener('focusin', event => {
+      const target = tipOf(event.target);
+      if (target && event.target.matches(':focus-visible')) showTip(target);
+    });
+    document.addEventListener('focusout', hideTip);
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') hideTip(); });
+    window.addEventListener('scroll', hideTip, true);
+    async function copyText(text) {
+      try { await navigator.clipboard.writeText(text); return true; } catch (_) { /* Not a secure page: fall back. */ }
+      const area = document.createElement('textarea');
+      area.value = text; area.setAttribute('readonly', ''); area.style.cssText = 'position:fixed;top:0;left:-9999px';
+      document.body.append(area); area.select();
+      let copied = false;
+      try { copied = document.execCommand('copy'); } catch (_) {}
+      area.remove();
+      return copied;
+    }
+    function setTip(node, label, more = '') {
+      node.dataset.tip = label;
+      if (more) node.dataset.tipMore = more; else delete node.dataset.tipMore;
+    }
+
     function show(name) {
+      hideTip();
       if (name !== 'editor') stopVoice();
       activeView = name;
       for (const [key, node] of Object.entries(views)) node.hidden = key !== name;
@@ -271,11 +438,13 @@
       clearTimeout(savedTimer);
       indicator.classList.remove('visible', 'error');
       indicator.setAttribute('aria-label', '');
+      delete indicator.dataset.tip; delete indicator.dataset.tipMore;
     }
     function showSaved() {
       indicator.classList.remove('error');
       indicator.classList.add('visible');
       indicator.setAttribute('aria-label', 'Saved');
+      setTip(indicator, 'Saved', 'Your latest changes are stored.');
       clearTimeout(savedTimer);
       savedTimer = setTimeout(hideIndicator, 1800);
     }
@@ -283,25 +452,52 @@
       indicator.classList.add('error');
       indicator.classList.add('visible');
       indicator.setAttribute('aria-label', 'Could not save');
+      setTip(indicator, 'Could not save', 'This note has changes that are not stored yet. Keep typing and it will try again.');
       indicator.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v6M12 17h.01"/></svg>';
     }
     function localDraft() {
       return { id: `local-${crypto.randomUUID()}`, title: '', body: '', updated_at: Date.now() / 1000, dirty: false, version: 0 };
     }
     function currentDraft() { return drafts.find(draft => draft.id === currentKey); }
+    function isBlank(draft) { return !draft.title.trim() && !draft.body.trim(); }
+    // A draft with no title and no text is not worth keeping once the writer has moved on from it.
+    // It leaves the list at once; a copy the server already holds is deleted behind the scenes
+    // (after any save under way, so that save cannot bring it back). Never a draft that dictation
+    // wrote into, since a spoken turn can still land in it after the mic stops.
+    function discardIfBlank(draft) {
+      if (MIRROR || !draft || voiceTarget === draft || !isBlank(draft)) return;
+      drafts = drafts.filter(item => item !== draft);
+      if (currentKey === draft.id) currentKey = null;
+      clearTimeout(timer);
+      (async () => {
+        try {
+          while (saving) await delay(50);
+          if (!draft.id.startsWith('local-')) await api(`/api/drafts/${encodeURIComponent(draft.id)}`, { method: 'DELETE' });
+        } catch (_) {
+          // Could not delete it on the server, so it still exists there: show it again.
+          drafts.unshift(draft);
+          if (activeView === 'drafts' && listMode === 'drafts') renderDrafts();
+        } finally { if (drafts.some(item => item.dirty)) scheduleSave(); }
+      })();
+    }
     function displayDraft(draft) {
+      const previous = currentDraft();
+      if (previous && previous !== draft) discardIfBlank(previous);
       if (voiceTarget && voiceTarget !== draft) stopVoice();
       currentFired = null;
       currentKey = draft.id;
       titleInput.value = draft.title;
       bodyInput.value = draft.body;
-      titleInput.readOnly = false;
-      bodyInput.readOnly = false;
+      titleInput.readOnly = MIRROR;
+      bodyInput.readOnly = MIRROR;
       indicator.hidden = false;
       document.getElementById('readonly-status').hidden = true;
+      document.getElementById('fired-info').hidden = true;
       document.getElementById('continue-button').hidden = false;
       document.getElementById('voice-button').hidden = false;
       document.getElementById('copy-button').hidden = true;
+      document.getElementById('remove-fired-button').hidden = true;
+      document.getElementById('resend-button').hidden = true;
       document.title = draft.title || 'Untitled';
       chatNameInput.value = draft.title;
       chatNameEdited = false;
@@ -311,6 +507,50 @@
     function statusIcon(state) {
       if (state === 'sending') return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="6" width="17" height="12" rx="1.5"/><path d="m4.5 7 7.5 6 7.5-6"/></svg>';
       return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/></svg>';
+    }
+    // What each state of a sent note means, in the words shown on hover, under the name on a phone, and on its page.
+    const STATE_WORDS = {
+      sending: { label: 'Sending', more: 'On its way to the chat. This usually takes a few seconds.', caption: 'Sending' },
+      checking: { label: 'Checking', more: 'Sent, but the chat has not confirmed it yet. The app keeps checking and flags it if it cannot confirm within 6 minutes. Nothing to do yet.', caption: 'Checking: no reply yet' },
+      attention: { label: 'Needs attention', more: 'Delivery could not be confirmed. Your text is safe here. Check the chat, and use Resend if it never arrived. The original stays until the retry is confirmed.', caption: 'Needs attention: not confirmed' },
+    };
+    function stateWords(state) { return STATE_WORDS[state] || { label: state, more: '', caption: state }; }
+    function ago(seconds) {
+      const diff = Math.max(0, Date.now() / 1000 - seconds);
+      if (diff < 60) return 'just now';
+      if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+      if (diff < 86400) return `${Math.floor(diff / 3600)} h ago`;
+      return new Date(seconds * 1000).toLocaleDateString([], { month: 'short', day: 'numeric' });
+    }
+    function clock(seconds) {
+      return new Date(seconds * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    }
+    function whereText(destination) {
+      const machine = destination.machine_name || 'this machine';
+      if (destination.mode === 'follow-up') return `follow-up in “${destination.chat_name || 'a chat'}” on ${machine}`;
+      const settings = [destination.provider, destination.subscription_label, destination.model_label || destination.model, destination.effort].filter(Boolean).join(' ');
+      return `new chat${destination.chat_name ? ` “${destination.chat_name}”` : ''} on ${machine}${settings ? ` (${settings})` : ''}`;
+    }
+    // The facts about a sent note, including the ID to quote when something needs debugging.
+    function renderFiredInfo(action) {
+      const box = document.getElementById('fired-info');
+      box.replaceChildren();
+      const words = stateWords(action.state);
+      const add = (className, text) => { const line = document.createElement('p'); line.className = className; line.textContent = text; box.append(line); return line; };
+      const state = add('state', ` ${words.more}`);
+      const label = document.createElement('b'); label.textContent = `${words.label}.`; state.prepend(label);
+      add('where', `Sent to ${whereText(action.destination)}`);
+      if (action.error) add('problem', `Last problem: ${action.error}`);
+      if (action.retry_of) add('retry', `Resent from ${action.retry_of}`);
+      if (action.pending_retry_id) add('retry', 'A resend is awaiting confirmation. This original is kept until it arrives.');
+      const line = add('id-line', `Fired ${clock(action.created_at)} · ID`);
+      const chip = document.createElement('button'); chip.type = 'button'; chip.className = 'id-chip'; chip.textContent = action.id;
+      chip.setAttribute('aria-label', `Copy ID ${action.id}`);
+      setTip(chip, 'Copy ID', 'Copies this ID, to quote when something needs debugging.');
+      const done = document.createElement('span'); done.className = 'copied'; done.setAttribute('aria-live', 'polite');
+      chip.addEventListener('click', async () => { done.textContent = (await copyText(action.id)) ? 'Copied' : 'Could not copy; select the ID instead'; });
+      line.append(chip, done);
+      box.hidden = false;
     }
     function displayFired(action) {
       stopVoice();
@@ -325,12 +565,18 @@
       const status = document.getElementById('readonly-status');
       status.className = `fired-status readonly-indicator ${action.state}`;
       status.innerHTML = statusIcon(action.state);
-      status.setAttribute('aria-label', action.state === 'attention' ? 'Needs attention' : action.state === 'sending' ? 'Sending' : 'Checking');
-      status.title = status.getAttribute('aria-label');
+      const words = stateWords(action.state);
+      status.setAttribute('aria-label', words.label);
+      setTip(status, words.label, words.more);
       status.hidden = false;
+      renderFiredInfo(action);
       document.getElementById('continue-button').hidden = true;
       document.getElementById('voice-button').hidden = true;
       document.getElementById('copy-button').hidden = false;
+      document.getElementById('remove-fired-button').hidden = action.state === 'sending';
+      const resend = document.getElementById('resend-button');
+      resend.hidden = !['attention', 'checking'].includes(action.state);
+      resend.disabled = Boolean(action.pending_retry_id);
       show('editor');
     }
     function scheduleSave() {
@@ -398,17 +644,36 @@
           const empty = document.createElement('div');
           empty.className = 'empty-outbox'; empty.setAttribute('role', 'img');
           empty.setAttribute('aria-label', 'Outbox empty');
+          setTip(empty, 'Outbox empty', 'Nothing is waiting or stuck.');
           empty.innerHTML = '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="m15 33 11 11 24-25"/></svg>';
           list.append(empty);
         }
         for (const action of fired) {
+          const words = stateWords(action.state);
+          const where = action.destination.machine_name || 'this machine';
+          const entry = document.createElement('div'); entry.className = 'draft-entry'; entry.dataset.id = action.id;
           const row = document.createElement('button'); row.type = 'button'; row.className = 'draft-row fired-row';
-          row.setAttribute('aria-label', `${action.title || 'Untitled'}, ${action.state === 'attention' ? 'needs attention' : action.state}`);
+          row.setAttribute('aria-label', `${action.title || 'Untitled'}, ${words.label.toLowerCase()}`);
+          setTip(row, `Fired ${ago(action.created_at)}`, `To ${whereText(action.destination)}. Open it for details and its ID.`);
           const name = document.createElement('span'); name.className = 'draft-name'; name.textContent = action.title || 'Untitled';
+          const caption = document.createElement('span'); caption.className = `fired-caption ${action.state}`;
+          const stateText = document.createElement('span'); stateText.className = 'state'; stateText.textContent = words.caption;
+          caption.append(stateText, document.createTextNode(` · ${where} · ${ago(action.created_at)}`));
+          const label = document.createElement('span'); label.className = 'fired-text'; label.append(name, caption);
           const status = document.createElement('span'); status.className = `fired-status ${action.state}`; status.innerHTML = statusIcon(action.state);
-          const tip = document.createElement('span'); tip.className = 'machine-tip';
-          tip.textContent = action.destination.machine_name || action.destination.chat_name || 'This machine';
-          row.append(name, status, tip); row.addEventListener('click', () => displayFired(action)); list.append(row);
+          status.setAttribute('role', 'img'); status.setAttribute('aria-label', words.label);
+          setTip(status, words.label, words.more);
+          row.append(label, status); row.addEventListener('click', () => displayFired(action));
+          entry.append(row);
+          if (action.state !== 'sending') {
+            const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'icon-button trash-button';
+            remove.setAttribute('aria-label', `Remove ${action.title || 'Untitled'} from Fired`);
+            setTip(remove, 'Remove from Fired', 'Take this off the list. Copy its text first if you still need it.');
+            remove.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7"/></svg>';
+            remove.addEventListener('click', async () => { remove.disabled = true; if (!(await removeFired(action))) remove.disabled = false; else renderDrafts(); });
+            entry.append(remove);
+          }
+          list.append(entry);
         }
         return;
       }
@@ -419,10 +684,10 @@
         row.append(name); row.addEventListener('click', () => displayDraft(draft));
         const entry = document.createElement('div'); entry.className = 'draft-entry';
         const trash = document.createElement('button'); trash.type = 'button'; trash.className = 'icon-button trash-button';
-        trash.setAttribute('aria-label', `Delete ${draft.title || 'Untitled'}`); trash.title = 'Delete draft';
+        trash.setAttribute('aria-label', `Delete ${draft.title || 'Untitled'}`); setTip(trash, 'Delete draft', 'Permanently removes this draft.');
         trash.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7"/></svg>';
         trash.addEventListener('click', async () => {
-          if (!confirm(`Delete “${draft.title || 'Untitled'}”? This cannot be undone.`)) return;
+          if (!isBlank(draft) && !confirm(`Delete “${draft.title || 'Untitled'}”? This cannot be undone.`)) return;
           trash.disabled = true;
           const error = document.getElementById('list-error'); error.hidden = true;
           try {
@@ -451,12 +716,32 @@
       select.disabled = false;
       for (const item of options) select.add(new Option(item.label, item.id));
     }
+    function machineDefaults() {
+      if (!modelMachine()) return { provider: 'claude', by_provider: {} };
+      return defaults.by_machine[modelMachine()] ||= { provider: 'claude', by_provider: {} };
+    }
+    function activateMachine() {
+      const settings = machineDefaults();
+      providerInput.value = settings.provider;
+      // Compatibility projection for an older tab; all reads use the scoped map.
+      defaults.provider = settings.provider;
+      defaults.by_provider = settings.by_provider;
+    }
     function providerDefaults() {
-      return defaults.by_provider[providerInput.value] ||= { model: '', effort_by_model: {} };
+      return machineDefaults().by_provider[providerInput.value] ||= { model: '', effort_by_model: {} };
+    }
+    function modelDefaults() {
+      const settings = providerDefaults();
+      const chosen = chosenSubscription();
+      if (!chosen) return settings;
+      return (settings.by_subscription ||= {})[chosen.id] ||= { model: '', effort_by_model: {} };
     }
     function saveDefaults() {
+      if (MIRROR || !modelMachine()) return;
       defaultsChanged = true;
       defaults.updated_at = Date.now();
+      defaults.provider = machineDefaults().provider;
+      defaults.by_provider = machineDefaults().by_provider;
       const snapshot = JSON.stringify(defaults);
       try { localStorage.setItem(DEFAULTS_KEY, snapshot); } catch (_) {}
       defaultsWrite = defaultsWrite.catch(() => {}).then(() => api('/api/destination-defaults', { method: 'PUT', body: snapshot }));
@@ -466,7 +751,8 @@
       if (machinesLoaded && !force) return;
       refreshMachinesButton.disabled = true;
       try {
-        const data = await api(force ? '/api/machines?fresh=1' : '/api/machines');
+        const data = !force && serverChoices.machines ? serverChoices.machines
+          : await api(force ? '/api/machines?fresh=1' : '/api/machines');
         const choices = data.machines.map(machine => ({ id: machine.id, label: machine.name }));
         const preferred = defaults.machine;
         if (preferred && !choices.some(machine => machine.id === preferred) && data.unavailable) {
@@ -475,6 +761,7 @@
         setOptions(machineInput, choices, 'Machines unavailable');
         const selected = choices.some(machine => machine.id === preferred) ? preferred : data.current_machine_id;
         if (selected && choices.some(machine => machine.id === selected)) machineInput.value = selected;
+        activateMachine();
         if (machineInput.value && machineInput.value !== defaults.machine) {
           defaults.machine = machineInput.value;
           defaults.machine_name = choices.find(machine => machine.id === machineInput.value)?.label || '';
@@ -496,24 +783,50 @@
       const model = models.find(item => item.id === modelInput.value);
       const efforts = (model?.efforts || []).map(level => ({ id: level, label: level }));
       setOptions(effortInput, efforts, model ? 'No effort setting' : 'Choose model first');
-      const preferred = providerDefaults().effort_by_model[modelInput.value];
+      const preferred = modelDefaults().effort_by_model[modelInput.value];
       if (efforts.some(item => item.id === preferred)) effortInput.value = preferred;
       if (model && efforts.length && !efforts.some(item => item.id === preferred)) {
-        providerDefaults().effort_by_model[model.id] = effortInput.value;
+        modelDefaults().effort_by_model[model.id] = effortInput.value;
         saveDefaults();
       }
     }
+    function chosenSubscription() { return subscriptions.find(item => item.id === subscriptionInput.value); }
+    // pi-dev answers with subscriptions: show them, pick the remembered one (else the first set up), and
+    // return only that subscription's models. Other providers have none and keep their whole list.
+    function applySubscriptions(data) {
+      subscriptions = Array.isArray(data.subscriptions) ? data.subscriptions : [];
+      subscriptionField.hidden = !subscriptions.length;
+      if (!subscriptions.length) return data.models;
+      subscriptionInput.replaceChildren();
+      subscriptionInput.disabled = false;
+      for (const item of subscriptions) {
+        const option = new Option(item.available ? item.label : `${item.label} (not set up)`, item.id);
+        option.disabled = !item.available;
+        subscriptionInput.add(option);
+      }
+      const settings = providerDefaults();
+      const usable = subscriptions.filter(item => item.available);
+      const preferred = usable.find(item => item.id === settings.subscription) || usable[0];
+      subscriptionInput.value = (preferred || subscriptions[0]).id;
+      if (preferred && preferred.id !== settings.subscription) { settings.subscription = preferred.id; saveDefaults(); }
+      return data.models.filter(model => model.subscription === subscriptionInput.value);
+    }
     function applyModels(data) {
-      const previous = modelInput.value;
-      models = data.models;
-      setOptions(modelInput, models, data.available ? 'No models available' : 'Provider unavailable');
-      const preferred = providerDefaults().model || previous;
+      models = applySubscriptions(data);
+      const chosen = chosenSubscription();
+      const empty = chosen && !chosen.available ? `${chosen.label}: ${chosen.detail || 'not set up'}`
+        : (data.available ? 'No models available' : 'Provider unavailable');
+      setOptions(modelInput, models, empty);
+      const preferred = modelDefaults().model;
       if (models.some(item => item.id === preferred)) modelInput.value = preferred;
       if (models.length && !models.some(item => item.id === preferred)) {
-        providerDefaults().model = modelInput.value;
+        rememberModel();
         saveDefaults();
       }
       populateEfforts();
+    }
+    function rememberModel() {
+      modelDefaults().model = modelInput.value;
     }
     async function loadModels() {
       const request = ++modelRequest;
@@ -522,6 +835,9 @@
       const cached = modelCache.get(modelKey(provider, machine));
       if (cached) { applyModels(cached.data); return; }
       models = [];
+      subscriptions = [];
+      subscriptionField.hidden = provider !== 'pi-dev';
+      setOptions(subscriptionInput, [], 'Loading subscriptions…');
       setOptions(modelInput, [], 'Loading models…');
       setOptions(effortInput, [], 'Choose model first');
       try {
@@ -579,11 +895,18 @@
       event.preventDefault();
       bodyInput.focus();
     });
+    // Shift+Tab from the note text goes straight back to the title, mirroring the Tab above.
+    bodyInput.addEventListener('keydown', event => {
+      if (event.key !== 'Tab' || !event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;
+      event.preventDefault();
+      titleInput.focus();
+    });
     bodyInput.addEventListener('input', () => changed('body'));
     chatNameInput.addEventListener('input', () => { chatNameEdited = true; });
     machineInput.addEventListener('change', () => {
       defaults.machine = machineInput.value;
       defaults.machine_name = machineInput.selectedOptions[0]?.textContent || '';
+      activateMachine();
       saveDefaults();
       warmModels();
       loadModels();
@@ -591,34 +914,53 @@
     });
     refreshMachinesButton.addEventListener('click', () => { loadMachines(true); if (followUpMode()) loadChats(true); });
     providerInput.addEventListener('change', () => {
-      defaults.provider = providerInput.value;
+      machineDefaults().provider = providerInput.value;
+      saveDefaults();
+      loadModels();
+    });
+    subscriptionInput.addEventListener('change', () => {
+      providerDefaults().subscription = subscriptionInput.value;
       saveDefaults();
       loadModels();
     });
     modelInput.addEventListener('change', () => {
-      providerDefaults().model = modelInput.value;
+      rememberModel();
       saveDefaults();
       populateEfforts();
     });
     effortInput.addEventListener('change', () => {
-      providerDefaults().effort_by_model[modelInput.value] = effortInput.value;
+      modelDefaults().effort_by_model[modelInput.value] = effortInput.value;
       saveDefaults();
     });
+    let firedSignature = '';
+    async function removeFired(action) {
+      if (!confirm(`Remove “${action.title || 'Untitled'}” from Fired? Copy its text first if you still need it.`)) return false;
+      try { await api(`/api/fired/${encodeURIComponent(action.id)}`, { method: 'DELETE' }); }
+      catch (error) { alert(error.message || 'Could not remove it.'); return false; }
+      fired = fired.filter(item => item.id !== action.id);
+      firedSignature = '';
+      return true;
+    }
     async function refreshFired() {
       try {
         const data = await api('/api/fired');
         fired = data.actions;
         firedLoaded = true;
-        if (listMode === 'fired' && activeView === 'drafts') renderDrafts();
+        // The ages in the list tick over once a minute; anything else must change the data.
+        const signature = JSON.stringify([fired, Math.floor(Date.now() / 60000)]);
+        const unchanged = signature === firedSignature;
+        firedSignature = signature;
+        if (!unchanged && listMode === 'fired' && activeView === 'drafts') renderDrafts();
         if (currentFired) {
           const fresh = fired.find(action => action.id === currentFired.id);
-          if (fresh && (fresh.state !== currentFired.state || fresh.error !== currentFired.error)) displayFired(fresh);
+          if (fresh && (fresh.state !== currentFired.state || fresh.error !== currentFired.error || fresh.pending_retry_id !== currentFired.pending_retry_id)) displayFired(fresh);
           else if (!fresh) { currentFired = null; createDraft(); }
         }
       } catch (_) { /* Keep the last visible state until connection returns. */ }
     }
     function showList(mode) {
       hasInteracted = true;
+      if (!currentFired) discardIfBlank(currentDraft());
       currentFired = null;
       listMode = mode;
       if (mode === 'fired') refreshFired();
@@ -628,34 +970,87 @@
     document.getElementById('fired-button').addEventListener('click', () => showList('fired'));
     document.getElementById('list-drafts').addEventListener('click', () => showList('drafts'));
     document.getElementById('list-fired').addEventListener('click', () => showList('fired'));
-    document.getElementById('copy-button').addEventListener('click', async () => {
+    document.getElementById('copy-button').addEventListener('click', async event => {
       if (!currentFired) return;
-      await navigator.clipboard.writeText(currentFired.body);
+      const button = event.currentTarget, original = { ...button.dataset };
+      setTip(button, (await copyText(currentFired.body)) ? 'Copied' : 'Could not copy');
+      showTip(button);
+      setTimeout(() => { hideTip(); setTip(button, original.tip, original.tipMore); }, 1500);
+    });
+    document.getElementById('resend-button').addEventListener('click', async event => {
+      if (!currentFired) return;
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        const action = await api(`/api/fired/${encodeURIComponent(currentFired.id)}/resend`, { method: 'POST' });
+        displayFired(action);
+        await refreshFired();
+      } catch (error) {
+        const problem = document.createElement('p'); problem.className = 'problem';
+        problem.setAttribute('role', 'alert'); problem.textContent = error.message;
+        document.getElementById('fired-info').append(problem);
+        button.disabled = false;
+      }
+    });
+    document.getElementById('remove-fired-button').addEventListener('click', async () => {
+      if (!currentFired || !(await removeFired(currentFired))) return;
+      showList('fired');
     });
     setInterval(() => { if (activeView === 'drafts' && listMode === 'fired' || currentFired) refreshFired(); }, 2500);
     function createDraft() {
       hasInteracted = true;
-      const current = currentDraft();
-      if (current?.id.startsWith('local-') && !current.title && !current.body && !current.dirty) {
-        drafts = drafts.filter(draft => draft !== current);
-      }
       const draft = localDraft();
       drafts.unshift(draft);
       displayDraft(draft);
       titleInput.focus();
     }
     document.querySelectorAll('.new-draft-button').forEach(button => button.addEventListener('click', createDraft));
-    document.getElementById('continue-button').addEventListener('click', async () => {
+    async function continueToSetup() {
+      if (MIRROR) return;
       await defaultsReady;
       show('setup');
       selectMode(document.getElementById('follow-up').getAttribute('aria-pressed') === 'true' ? 'follow-up' : 'new-chat');
-    });
-    document.querySelectorAll('.back-button').forEach(button => button.addEventListener('click', () => {
+    }
+    function backToEditor() {
       if (currentFired) { showList('fired'); return; }
       const draft = currentDraft();
       if (draft) displayDraft(draft);
       else createDraft();
-    }));
+    }
+    document.getElementById('continue-button').addEventListener('click', continueToSetup);
+    document.querySelectorAll('.back-button').forEach(button => button.addEventListener('click', backToEditor));
+    // Keyboard: Escape steps back out of a screen (a sent note to the Fired list, the lists and the
+    // destination screen to the note). The go-ahead key moves a note being written on to the
+    // destination screen, and there sends it: Cmd+Enter on a Mac, Ctrl+Enter anywhere else (the
+    // other modifier does nothing, so each system keeps its own habit). Escape is left alone while
+    // it is doing something else (closing the speech model menu, or ending text composition), and
+    // neither key repeats when held.
+    const onMac = /Mac|iPhone|iPad|iPod/i.test(navigator.userAgentData?.platform || navigator.platform || '');
+    const GO_KEY = onMac ? 'Cmd+Enter' : 'Ctrl+Enter';
+    setTip(document.getElementById('continue-button'), 'Continue', `Choose where to send this note. Shortcut: ${GO_KEY}.`);
+    setTip(document.getElementById('preview-button'), 'Send', `Send this note to the place chosen above. Shortcut: ${GO_KEY}.`);
+    function goKeyPressed(event) {
+      const modifier = onMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+      return event.key === 'Enter' && modifier && !event.altKey && !event.shiftKey;
+    }
+    document.addEventListener('keydown', event => {
+      if (event.isComposing || event.keyCode === 229 || event.repeat || event.defaultPrevented) return;
+      if (event.key === 'Escape' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+        if (!voiceMenu.hidden) return;
+        if (activeView === 'editor' && !currentFired) return;
+        event.preventDefault();
+        backToEditor();
+      } else if (goKeyPressed(event)) {
+        if (activeView === 'editor' && !currentFired) {
+          event.preventDefault();
+          continueToSetup();
+        } else if (activeView === 'setup') {
+          event.preventDefault();
+          const send = document.getElementById('preview-button');
+          if (!send.disabled) send.click();
+        }
+      }
+    });
     document.getElementById('new-chat').addEventListener('click', () => selectMode('new-chat'));
     document.getElementById('follow-up').addEventListener('click', () => selectMode('follow-up'));
     document.getElementById('preview-button').addEventListener('click', async event => {
@@ -676,7 +1071,9 @@
               chat_name: targetChatInput.selectedOptions[0]?.textContent || '' }
           : { mode: 'new', chat_name: chatNameInput.value.trim(), machine: machineInput.value,
               machine_name: machineInput.selectedOptions[0]?.textContent || '', provider: providerInput.value,
-              model: modelInput.value, effort: effortInput.value };
+              model: modelInput.value, model_label: modelInput.selectedOptions[0]?.textContent || '', effort: effortInput.value };
+        const subscription = followUp ? null : chosenSubscription();
+        if (subscription) Object.assign(destination, { subscription: subscription.id, subscription_label: subscription.label, account_id: subscription.account_id });
         if (followUp && !destination.chat_id || !followUp && (!destination.model || !destination.machine)) {
           throw new Error('Choose a destination.');
         }
@@ -711,7 +1108,8 @@
       voiceButton.classList.toggle('listening', state === 'listening');
       voiceButton.setAttribute('aria-pressed', String(state !== 'idle'));
       voiceButton.setAttribute('aria-label', state === 'idle' ? 'Start dictation' : 'Stop dictation');
-      voiceButton.title = state === 'idle' ? 'Dictate (right-click or hold for models)' : 'Stop dictating';
+      if (state === 'idle') setTip(voiceButton, 'Dictate', 'Tap to start talking. Right-click or hold to pick a speech model.');
+      else setTip(voiceButton, 'Stop dictating', state === 'starting' ? 'Tap to cancel.' : 'Tap to stop.');
       if (state !== 'listening') { shownLevel = 0; voiceButton.style.setProperty('--level', 0); }
     }
     function showVoiceNotice(text, offerTab) {
@@ -970,8 +1368,8 @@
       if (defaultsChanged) return;
       if (localDefaultsReady && (defaults.updated_at || 0) > (data.updated_at || 0)) { saveDefaults(); return; }
       const machineBefore = modelMachine();
-      defaults = data;
-      providerInput.value = defaults.provider;
+      defaults = normalizeDefaults(data);
+      activateMachine();
       try { localStorage.setItem(DEFAULTS_KEY, JSON.stringify(defaults)); } catch (_) {}
       // A new browser learns the usual machine only now; warm its models ahead of Continue.
       if (modelMachine() !== machineBefore) warmModels();
@@ -980,6 +1378,56 @@
     defaultsReady = localDefaultsReady ? Promise.resolve() : defaultsFetch;
     warmModels();
     setInterval(warmModels, 5 * 60 * 1000);
+
+    // Each tab/installed copy compares against the version that rendered it,
+    // never a freshly fetched baseline (which could miss an update while loading).
+    const loadedFrontendVersion = '__FRONTEND_VERSION__';
+    const updateNotice = document.getElementById('update-notice');
+    const updateMessage = document.getElementById('update-message');
+    const refreshAppButton = document.getElementById('refresh-app');
+    let checkingUpdate = false;
+    async function checkFrontendUpdate() {
+      if (checkingUpdate || !updateNotice.hidden) return;
+      checkingUpdate = true;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      try {
+        const response = await fetch('/api/frontend-version', { cache: 'no-store', signal: controller.signal });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (typeof data.version === 'string' && /^[a-f0-9]{64}$/.test(data.version) && data.version !== loadedFrontendVersion) {
+          updateNotice.hidden = false;
+        }
+      } catch (_) { /* Offline or restarting: keep writing and retry later. */ }
+      finally { clearTimeout(timeout); checkingUpdate = false; }
+    }
+    refreshAppButton.addEventListener('click', async () => {
+      if (voiceState !== 'idle') {
+        updateMessage.textContent = 'Stop dictation, then click to refresh.';
+        return;
+      }
+      refreshAppButton.disabled = true;
+      updateMessage.textContent = 'Saving before refreshing…';
+      try {
+        // An autosave already in flight must finish before another can begin.
+        const deadline = Date.now() + 10000;
+        while (saving && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 50));
+        if (saving) throw new Error('Save still running');
+        await saveDirty();
+        await defaultsWrite;
+        if (saving || drafts.some(draft => draft.dirty) || voiceState !== 'idle') throw new Error('Not ready to refresh');
+        window.location.reload();
+      } catch (_) {
+        updateMessage.textContent = 'Could not refresh safely. Finish dictation or check your connection, then try again.';
+        refreshAppButton.disabled = false;
+      }
+    });
+    setInterval(checkFrontendUpdate, 10000);
+    window.addEventListener('focus', checkFrontendUpdate);
+    window.addEventListener('online', checkFrontendUpdate);
+    window.addEventListener('pageshow', checkFrontendUpdate);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) checkFrontendUpdate(); });
+    checkFrontendUpdate();
   </script>
   <!-- shell script -->
 </body>

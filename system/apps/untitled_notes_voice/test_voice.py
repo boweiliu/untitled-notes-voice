@@ -22,7 +22,7 @@ SANDBOX = "allow-scripts allow-same-origin allow-forms allow-popups allow-popups
 SPEECH_SAMPLE = "https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/jfk.wav"
 
 
-def test_page_is_cross_origin_isolated_for_the_v2_models(tmp_path, monkeypatch):
+def test_page_is_cross_origin_isolated_for_the_v2_models(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(runner, "DATA_DIR", tmp_path)
     response = runner.app.test_client().get("/")
     assert response.headers["Cross-Origin-Opener-Policy"] == "same-origin"
@@ -31,7 +31,7 @@ def test_page_is_cross_origin_isolated_for_the_v2_models(tmp_path, monkeypatch):
     assert streaming.status_code == 200 and b"moonshine-wasm@0.1.5" in streaming.data
 
 
-def test_voice_modules_are_served_and_nothing_else(tmp_path, monkeypatch):
+def test_voice_modules_are_served_and_nothing_else(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(runner, "DATA_DIR", tmp_path)
     client = runner.app.test_client()
     capture = client.get("/voice/voice_capture.js")
@@ -42,21 +42,22 @@ def test_voice_modules_are_served_and_nothing_else(tmp_path, monkeypatch):
     assert client.get("/voice/..%2Frunner.py").status_code == 404
 
 
-def test_page_loads_voice_modules_before_the_editor_script(tmp_path, monkeypatch):
+def test_page_loads_voice_modules_before_the_editor_script(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(runner, "DATA_DIR", tmp_path)
     page = runner.app.test_client().get("/").get_data(as_text=True)
-    session = page.index('<script src="/voice/voice_session.js">')
-    capture = page.index('<script src="/voice/voice_capture.js">')
+    # Each script address carries the frontend version (?v=...), so only its start is matched.
+    session = page.index('<script src="/voice/voice_session.js?v=')
+    capture = page.index('<script src="/voice/voice_capture.js?v=')
     editor = page.index("const voiceButton")
     assert session < capture < editor
     assert 'id="voice-button"' in page
 
 
-def test_streaming_model_invariants():
+def test_streaming_model_invariants() -> None:
     node = shutil.which("node")
     if node is None:
         pytest.skip("node is not installed")
-    result = subprocess.run([node, "--test", str(ASSETS / "voice_session.test.mjs")], capture_output=True, text=True, timeout=120)
+    result = subprocess.run([node, "--test-reporter=tap", "--test", str(ASSETS / "voice_session.test.mjs")], capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "# fail 0" in result.stdout
 
@@ -80,7 +81,7 @@ def open_framed(browser, port, allow):
 
 
 @pytest.mark.browser
-def test_blocked_window_offers_its_own_tab(tmp_path, monkeypatch):
+def test_blocked_window_offers_its_own_tab(tmp_path, monkeypatch) -> None:
     server = serve(tmp_path, monkeypatch)
     try:
         with sync_playwright() as playwright:
@@ -105,7 +106,7 @@ def test_blocked_window_offers_its_own_tab(tmp_path, monkeypatch):
 
 
 @pytest.mark.browser
-def test_model_menu_opens_on_right_click_and_hold_and_remembers_the_choice(tmp_path, monkeypatch):
+def test_model_menu_opens_on_right_click_and_hold_and_remembers_the_choice(tmp_path, monkeypatch) -> None:
     server = serve(tmp_path, monkeypatch)
     try:
         with sync_playwright() as playwright:
@@ -155,7 +156,7 @@ QUIET_PHONE_MIC = """() => {
 
 
 @pytest.mark.browser
-def test_recording_indicator_is_visible_on_a_phone_mic(tmp_path, monkeypatch):
+def test_recording_indicator_is_visible_on_a_phone_mic(tmp_path, monkeypatch) -> None:
     server = serve(tmp_path, monkeypatch)
     try:
         with sync_playwright() as playwright:
@@ -180,7 +181,7 @@ def test_recording_indicator_is_visible_on_a_phone_mic(tmp_path, monkeypatch):
 
 
 @pytest.mark.browser
-def test_v2_models_are_unavailable_inside_a_window(tmp_path, monkeypatch):
+def test_v2_models_are_unavailable_inside_a_window(tmp_path, monkeypatch) -> None:
     server = serve(tmp_path, monkeypatch)
     try:
         with sync_playwright() as playwright:
@@ -197,7 +198,7 @@ def test_v2_models_are_unavailable_inside_a_window(tmp_path, monkeypatch):
 
 
 @pytest.mark.browser
-def test_denied_microphone_explains_without_a_tab_link(tmp_path, monkeypatch):
+def test_denied_microphone_explains_without_a_tab_link(tmp_path, monkeypatch) -> None:
     server = serve(tmp_path, monkeypatch)
     try:
         with sync_playwright() as playwright:
@@ -248,7 +249,7 @@ def speech_wav(directory: Path) -> Path:
 # The v2 run uses Tiny: on a test machine's CPU, Small transcribes no faster than real
 # time, so a live session falls behind (fed whole, Small reads this sample best of all).
 @pytest.mark.parametrize("framing, engine", [("top", "base"), ("framed-with-microphone", "base"), ("top", "v2-tiny")])
-def test_dictation_transcribes_speech_into_the_saved_draft(tmp_path, monkeypatch, framing, engine):
+def test_dictation_transcribes_speech_into_the_saved_draft(tmp_path, monkeypatch, framing, engine) -> None:
     """Downloads and runs the real speech model (about 2 GB of browser memory) on a recorded sample."""
     sample = speech_wav(tmp_path)
     data = tmp_path / "data"

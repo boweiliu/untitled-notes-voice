@@ -56,3 +56,29 @@ node --test system/apps/untitled_notes_voice/src/prompt_notes/assets/voice_sessi
 
 Browser tests use Fortress and disposable draft data. Real-model checks marked
 `voice_model` require model downloads and roughly 2 GB of browser memory.
+
+## New in v5
+
+Provider and subscription choices now include pi accounts (Claude, Codex/ChatGPT,
+OpenCode and other installed providers) and Antigravity. Destination defaults are
+remembered per machine, model catalogs survive reloads, and sent notes can be
+inspected, copied, removed or explicitly resent. The page detects updates and
+includes home-screen icons and a web app manifest.
+
+## Optional destination integrations
+
+Claude, Codex and OpenCode need the corresponding connected account on each
+chosen destination. Antigravity needs its connected account and installed command.
+The pi picker requires pi and its account/model support on the destination. The
+private deployment scripts and vendored Claude Code/shared-bridge and Codex-login
+extensions are not included or automatically installed. Install compatible pi
+provider extensions yourself if needed; missing pi or accounts appear unavailable.
+No app module imports the excluded deployment tree. The developer tool that probes
+third-party APIs for retired models is excluded; the static retired-model list is included.
+
+`PROMPT_NOTES_PRIMARY_MACHINE` defaults to empty, so installations keep their own
+notes. Set it to a linked destination id to use a shared primary store; that
+requires the same read and destination SSH permissions as remote sending. When
+that primary is unreachable, the app reports it and does not create a split store.
+Private copying, cache-prefill and update schedules are excluded. Existing mirror
+markers remain readable, but this template does not create or refresh copies.

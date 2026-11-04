@@ -64,7 +64,8 @@ def test_empty_title_stays_empty_and_destination_defaults_persist(tmp_path: Path
         },
     }
     assert client.put("/api/destination-defaults", json=preferences).status_code == 200
-    assert runner.app.test_client().get("/api/destination-defaults").get_json() == preferences
+    saved = runner.app.test_client().get("/api/destination-defaults").get_json()
+    assert saved["by_machine"]["agent-remote"] == {"provider": "codex", "by_provider": preferences["by_provider"]}
 
 
 def test_machine_choices_show_running_linked_machines_and_current_fallback(tmp_path: Path, monkeypatch) -> None:
@@ -131,14 +132,15 @@ def test_chat_choices_use_catalog_account_options_and_chat_names(monkeypatch) ->
     ]
 
 
-def test_delete_only_selected_draft_and_preserve_fired_history(tmp_path, monkeypatch):
+def test_delete_only_selected_draft_and_preserve_fired_history(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(runner, "DATA_DIR", tmp_path)
     client = runner.app.test_client()
     first = client.post("/api/drafts", json={"title": "Remove", "body": "Old text"}).get_json()
     keep = client.post("/api/drafts", json={"title": "Keep", "body": "Important text"}).get_json()
     with runner.database() as connection:
         connection.execute(
-            "INSERT INTO fired_actions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO fired_actions (id, draft_id, title, body, destination, state, chat_id, error, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             ("history", first["id"], "Sent", "Sent original", "{}", "attention", "", "", 1, 1),
         )
     assert client.delete(f"/api/drafts/{first['id']}").status_code == 200
@@ -147,7 +149,7 @@ def test_delete_only_selected_draft_and_preserve_fired_history(tmp_path, monkeyp
     assert client.get("/api/fired").get_json()["actions"][0]["body"] == "Sent original"
 
 
-def test_models_come_from_selected_destination(monkeypatch):
+def test_models_come_from_selected_destination(monkeypatch) -> None:
     monkeypatch.setenv("MNGR_AGENT_ID", "local")
     calls = []
     def remote(machine, method, path, payload=None, timeout=45):
@@ -165,7 +167,63 @@ def test_models_come_from_selected_destination(monkeypatch):
     assert all(machine == "worker" and method == "GET" for machine, method, path in calls)
 
 
-def test_choices_answer_from_memory_and_refresh_behind(tmp_path: Path, monkeypatch):
+def test_a_provider_whose_model_cannot_be_set_offers_only_its_default_when_its_list_is_unavailable(monkeypatch) -> None:
+    # Agy's model is read-only in the chat app: a pick sent with a new chat is dropped, so the chat
+    # app's own model list is never offered (the live list is tested in test_agy.py). The real example-machine
+    # answers are mirrored here.
+    monkeypatch.setenv("MNGR_AGENT_ID", "local")
+    accounts = {"accounts": [{"id": "agy-account", "harness": "antigravity", "provider": "Google"}]}
+
+    def remote(machine, method, path, payload=None, timeout=45):
+        if path == "/api/harnesses":
+            return 200, {"antigravity": {"switch_mode": "read_only", "options": [
+                {"id": "gemini-3.7-flash-high", "label": "Gemini 3.7 Flash (High)", "in_picker": True, "efforts": []}]}}
+        if path == "/api/accounts":
+            return 200, accounts
+        assert path == "/api/accounts/agy-account/model-options"
+        return 200, {"models": None, "options": []}
+
+    def unreachable(machine, request, timeout):
+        raise OSError("Selected machine did not respond")
+
+    monkeypatch.setattr(runner, "chat_request", remote)
+    monkeypatch.setattr(runner, "agy_remote", unreachable)
+    client = runner.app.test_client()
+    response = client.get("/api/chat-models/agy?machine=fresh&fresh=1").get_json()
+    assert response["available"] is True
+    assert response["models"] == [{"id": runner.PROVIDER_DEFAULT_MODEL, "label": "Agy's own default model", "efforts": []}]
+
+    # With the provider not connected there is nothing to offer, and the page says so.
+    accounts["accounts"] = []
+    response = client.get("/api/chat-models/agy?machine=fresh&fresh=1").get_json()
+    assert response["available"] is False and response["models"] == []
+
+
+def test_empty_account_options_fall_back_to_the_catalog(monkeypatch) -> None:
+    # A chat app whose account answers model-options with an empty list while its catalog
+    # holds the models (an older Agy, with no switch mode): the empty list must not hide them.
+    monkeypatch.setenv("MNGR_AGENT_ID", "local")
+    catalog = [
+        {"id": "gemini-3.7-flash-high", "label": "Gemini 3.7 Flash (High)", "in_picker": True, "efforts": []},
+        {"id": "gemini-3.1-pro-high", "label": "Gemini 3.1 Pro (High)", "in_picker": True, "efforts": []},
+        {"id": "internal-only", "label": "Internal", "in_picker": False, "efforts": []},
+    ]
+
+    def remote(machine, method, path, payload=None, timeout=45):
+        if path == "/api/harnesses":
+            return 200, {"antigravity": {"options": catalog}}
+        if path == "/api/accounts":
+            return 200, {"accounts": [{"id": "agy-account", "harness": "antigravity"}]}
+        assert path == "/api/accounts/agy-account/model-options"
+        return 200, {"models": None, "options": []}
+
+    monkeypatch.setattr(runner, "chat_request", remote)
+    response = runner.app.test_client().get("/api/chat-models/agy?machine=fresh&fresh=1").get_json()
+    assert response["available"] is True
+    assert [model["id"] for model in response["models"]] == ["gemini-3.7-flash-high", "gemini-3.1-pro-high"]
+
+
+def test_choices_answer_from_memory_and_refresh_behind(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("MNGR_AGENT_ID", "local")
     state = {"model": "first", "fail": False}
     calls = []
@@ -216,7 +274,7 @@ def test_choices_answer_from_memory_and_refresh_behind(tmp_path: Path, monkeypat
     assert model_ids() == ["second"]
     assert len(calls) == asked
     saved = json.loads((tmp_path / "choice_cache.json").read_text())
-    assert saved["models:worker:codex"]["value"]["models"][0]["id"] == "second"
+    assert saved["models-v4:worker:codex"]["value"]["models"][0]["id"] == "second"
 
     # A refresh that cannot reach the machine keeps the last answer.
     state["fail"] = True
